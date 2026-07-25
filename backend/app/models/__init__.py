@@ -2,4 +2,5 @@
 from app.models.household import Household  # noqa: F401
 from app.models.user import User, Role  # noqa: F401
 from app.models.session import UserSession  # noqa: F401
+from app.models.connection import ProviderConnection, Provider, ConnStatus  # noqa: F401
 

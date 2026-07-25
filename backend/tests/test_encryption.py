@@ -18,3 +18,11 @@ def test_tamper_detected():
     blob[-1] ^= 0x01
     with pytest.raises(Exception):
         decrypt(bytes(blob))
+
+
+def test_aad_context_binding():
+    secret = b"plaid-access-token-123"
+    blob = encrypt(secret, aad=b"ctxA")
+    with pytest.raises(Exception):
+        decrypt(blob, aad=b"ctxB")
+    assert decrypt(blob, aad=b"ctxA") == secret
