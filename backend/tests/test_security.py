@@ -6,3 +6,7 @@ def test_hash_roundtrip():
     assert h != "s3cret"
     assert verify_password("s3cret", h)
     assert not verify_password("wrong", h)
+
+
+def test_verify_password_malformed_hash_returns_false():
+    assert verify_password("x", "not-a-valid-hash") is False
