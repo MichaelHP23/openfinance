@@ -5,4 +5,5 @@ from app.models.session import UserSession  # noqa: F401
 from app.models.connection import ProviderConnection, Provider, ConnStatus  # noqa: F401
 from app.models.category import Category  # noqa: F401
 from app.models.account import Account, AccountType  # noqa: F401
+from app.models.transaction import Transaction  # noqa: F401
 
