@@ -1,1 +1,169 @@
 @import "tailwindcss";
+
+@import "@fontsource/instrument-serif/400.css";
+@import "@fontsource/instrument-serif/400-italic.css";
+@import "@fontsource/ibm-plex-sans/400.css";
+@import "@fontsource/ibm-plex-sans/500.css";
+@import "@fontsource/ibm-plex-sans/600.css";
+@import "@fontsource/ibm-plex-mono/400.css";
+@import "@fontsource/ibm-plex-mono/500.css";
+
+@theme {
+  --font-display: "Instrument Serif", Georgia, serif;
+  --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+
+  /* Warm ink, bone type, one acid accent. */
+  --color-ink: #0b0b0c;
+  --color-ink-2: #111114;
+  --color-surface: #17171a;
+  --color-surface-2: #1e1e22;
+  --color-line: #2a2a30;
+  --color-bone: #edeae4;
+  --color-muted: #8a8780;
+  --color-acid: #c6f24e;
+  --color-clay: #e8785a;
+}
+
+@layer base {
+  html {
+    color-scheme: dark;
+  }
+
+  body {
+    background-color: var(--color-ink);
+    color: var(--color-bone);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    /* Warm glow bleeding from the top-left, so the page isn't a flat black rectangle. */
+    background-image:
+      radial-gradient(70rem 40rem at -10% -15%, rgba(198, 242, 78, 0.07), transparent 60%),
+      radial-gradient(50rem 40rem at 110% 0%, rgba(232, 120, 90, 0.05), transparent 55%);
+    background-attachment: fixed;
+  }
+
+  /* Money never reflows when a digit changes. */
+  .tnum {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.02em;
+  }
+
+  input,
+  select {
+    background-color: var(--color-ink-2);
+    border: 1px solid var(--color-line);
+    color: var(--color-bone);
+    border-radius: 0.5rem;
+    padding: 0.55rem 0.75rem;
+    font-size: 0.875rem;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+
+  input::placeholder {
+    color: #6c6a65;
+  }
+
+  input:focus,
+  select:focus {
+    outline: none;
+    border-color: var(--color-acid);
+    box-shadow: 0 0 0 3px rgba(198, 242, 78, 0.13);
+  }
+
+  input[type="file"] {
+    border: 1px dashed var(--color-line);
+    background: transparent;
+    cursor: pointer;
+  }
+
+  ::-webkit-calendar-picker-indicator {
+    filter: invert(0.8);
+    cursor: pointer;
+  }
+}
+
+@layer components {
+  .card {
+    background: linear-gradient(180deg, var(--color-surface), var(--color-ink-2));
+    border: 1px solid var(--color-line);
+    border-radius: 0.875rem;
+  }
+
+  .label {
+    font-size: 0.6875rem;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--color-muted);
+  }
+
+  .btn {
+    background-color: var(--color-acid);
+    color: #10130a;
+    font-weight: 600;
+    font-size: 0.875rem;
+    border-radius: 0.5rem;
+    padding: 0.55rem 1.1rem;
+    transition: transform 0.12s ease, filter 0.15s ease;
+    cursor: pointer;
+  }
+
+  .btn:hover {
+    filter: brightness(1.08);
+  }
+
+  .btn:active {
+    transform: translateY(1px);
+  }
+
+  .btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+
+  .btn-ghost {
+    border: 1px solid var(--color-line);
+    background: transparent;
+    color: var(--color-bone);
+    font-size: 0.875rem;
+    border-radius: 0.5rem;
+    padding: 0.55rem 1.1rem;
+    cursor: pointer;
+    transition: border-color 0.15s ease, background 0.15s ease;
+  }
+
+  .btn-ghost:hover {
+    border-color: #4a4a52;
+    background: rgba(237, 234, 228, 0.04);
+  }
+
+  /* Staggered entrance: set --d per element. */
+  .rise {
+    animation: rise 0.5s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+    animation-delay: var(--d, 0ms);
+  }
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes grow {
+  from {
+    transform: scaleY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rise,
+  [style*="--grow"] {
+    animation: none !important;
+  }
+}

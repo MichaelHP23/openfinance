@@ -8,7 +8,12 @@ export async function apiFetch<T>(path: string, opts: RequestInit = {}): Promise
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new Error(body.detail ?? res.statusText);
+    // FastAPI errors carry `detail`; slowapi's rate limiter carries `error`.
+    const message =
+      res.status === 429
+        ? "Too many attempts — wait a minute and try again."
+        : (body.detail ?? body.error ?? res.statusText);
+    throw new Error(message);
   }
   return res.status === 204 ? (undefined as T) : res.json();
 }

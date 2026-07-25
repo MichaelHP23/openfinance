@@ -3,6 +3,10 @@
 ## [Unreleased] — M0 Foundation
 
 ### Added
+- `LOCAL_MODE` single-user desktop mode — no login, one household, guarded to
+  `ENVIRONMENT=development`. Compose enables it by default.
+- Designed UI: sidebar shell, overview with net worth / cash flow / top merchants,
+  accounts and transactions pages.
 - Email/password auth: argon2id hashing, opaque server-side sessions, rate-limited
   register/login, `GET /auth/me`.
 - Household tenancy — every financial row scoped to `household_id`, with isolation tests.

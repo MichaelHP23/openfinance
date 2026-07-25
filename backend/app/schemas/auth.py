@@ -13,3 +13,5 @@ class UserOut(BaseModel):
     email: str
     role: str
     household_id: uuid.UUID
+    # Lets the client hide login/logout affordances that mean nothing without auth.
+    local_mode: bool = False

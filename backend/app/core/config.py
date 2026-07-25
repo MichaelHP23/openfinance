@@ -10,6 +10,9 @@ class Settings(BaseSettings):
     environment: str = "development"
     # Comma-separated exact origins. Credentialed CORS forbids "*", so this is never a wildcard.
     cors_origins: str = "http://localhost:5173"
+    # Single-user desktop mode: every request runs as one local household, no login.
+    # There is NO authentication when this is on — only ever bind to localhost.
+    local_mode: bool = False
 
     @property
     def cors_origin_list(self) -> list[str]:

@@ -3,19 +3,24 @@ import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-quer
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { apiFetch } from "./api/client";
 import { AuthPage } from "./auth/AuthPage";
-import { Dashboard } from "./Dashboard";
+import { OverviewPage } from "./pages/OverviewPage";
+import { AccountsPage } from "./pages/AccountsPage";
+import { TransactionsPage } from "./pages/TransactionsPage";
+import { Shell } from "./ui/Shell";
 
 const qc = new QueryClient();
 
+type Me = { email: string; household_id: string; local_mode: boolean };
+
+function useMe() {
+  return useQuery({ queryKey: ["me"], queryFn: () => apiFetch<Me>("/auth/me"), retry: false });
+}
+
 function Protected({ children }: { children: ReactNode }) {
-  const { data, isLoading, isError } = useQuery({
-    queryKey: ["me"],
-    queryFn: () => apiFetch("/auth/me"),
-    retry: false,
-  });
-  if (isLoading) return <div className="p-8">Loading…</div>;
+  const { data, isLoading, isError } = useMe();
+  if (isLoading) return <div className="p-10 text-sm text-muted">Loading…</div>;
   if (isError || !data) return <Navigate to="/login" replace />;
-  return <>{children}</>;
+  return <Shell localMode={data.local_mode}>{children}</Shell>;
 }
 
 export default function App() {
@@ -29,10 +34,27 @@ export default function App() {
             path="/"
             element={
               <Protected>
-                <Dashboard />
+                <OverviewPage />
               </Protected>
             }
           />
+          <Route
+            path="/accounts"
+            element={
+              <Protected>
+                <AccountsPage />
+              </Protected>
+            }
+          />
+          <Route
+            path="/transactions"
+            element={
+              <Protected>
+                <TransactionsPage />
+              </Protected>
+            }
+          />
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>
     </QueryClientProvider>

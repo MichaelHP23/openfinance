@@ -1,44 +1,45 @@
 import { useForm } from "react-hook-form";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "./api/client";
+import { ACCOUNT_TYPES, useAccounts } from "./data";
+import { LIABILITY_TYPES, prettyType, usd } from "./money";
+import { Empty } from "./ui/Shell";
 
-export type Account = {
-  id: string;
-  name: string;
-  type: string;
-  institution: string | null;
-  balance: string;
-  currency: string;
-};
-
-export const ACCOUNT_TYPES = [
-  "checking",
-  "savings",
-  "credit_card",
-  "cash",
-  "investment",
-  "crypto",
-  "loan",
-  "asset",
-  "liability",
-] as const;
-
-export function useAccounts() {
-  return useQuery({ queryKey: ["accounts"], queryFn: () => apiFetch<Account[]>("/accounts") });
-}
+const initials = (name: string) =>
+  name
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((w) => w[0])
+    .join("")
+    .toUpperCase();
 
 export function AccountList() {
-  const { data = [] } = useAccounts();
+  const { data = [], isLoading } = useAccounts();
+  if (isLoading) return <Empty>Loading accounts…</Empty>;
+  if (data.length === 0) return <Empty>No accounts yet — add your first one above.</Empty>;
+
   return (
-    <ul className="divide-y rounded border">
-      {data.length === 0 && <li className="p-3 text-gray-500">No accounts yet.</li>}
-      {data.map((a) => (
-        <li key={a.id} className="flex justify-between p-3">
-          <span>
-            {a.name} <em className="text-gray-500">({a.type})</em>
+    <ul className="divide-y divide-line">
+      {data.map((a, i) => (
+        <li
+          key={a.id}
+          className="rise flex items-center gap-4 py-3.5 transition-colors first:pt-0 last:pb-0 hover:bg-[rgba(237,234,228,0.02)]"
+          style={{ "--d": `${i * 40}ms` } as React.CSSProperties}
+        >
+          <span className="tnum flex size-9 shrink-0 items-center justify-center rounded-lg border border-line bg-ink text-[11px] text-muted">
+            {initials(a.name)}
           </span>
-          <span>
-            {a.currency} {a.balance}
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-sm">{a.name}</span>
+            <span className="label">
+              {prettyType(a.type)}
+              {a.institution ? ` · ${a.institution}` : ""}
+            </span>
+          </span>
+          <span
+            className={`tnum text-sm ${LIABILITY_TYPES.has(a.type) ? "text-clay" : "text-bone"}`}
+          >
+            {LIABILITY_TYPES.has(a.type) ? `−${usd(Math.abs(Number(a.balance)))}` : usd(a.balance)}
           </span>
         </li>
       ))}
@@ -46,7 +47,7 @@ export function AccountList() {
   );
 }
 
-type Form = { name: string; type: string; balance: string };
+type Form = { name: string; type: string; balance: string; institution: string };
 
 export function NewAccountForm() {
   const qc = useQueryClient();
@@ -54,27 +55,60 @@ export function NewAccountForm() {
     defaultValues: { type: "checking", balance: "0" },
   });
   const mut = useMutation({
-    mutationFn: (f: Form) => apiFetch("/accounts", { method: "POST", body: JSON.stringify(f) }),
+    mutationFn: (f: Form) =>
+      apiFetch("/accounts", {
+        method: "POST",
+        body: JSON.stringify({ ...f, institution: f.institution || null }),
+      }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["accounts"] });
       reset();
     },
   });
+
   return (
-    <form onSubmit={handleSubmit((f) => mut.mutate(f))} className="flex flex-wrap gap-2">
-      <input
-        className="rounded border p-2"
-        placeholder="Name"
-        {...register("name", { required: true })}
-      />
-      <select className="rounded border p-2" aria-label="Account type" {...register("type")}>
-        {ACCOUNT_TYPES.map((t) => (
-          <option key={t}>{t}</option>
-        ))}
-      </select>
-      <input className="w-28 rounded border p-2" placeholder="Balance" {...register("balance")} />
-      <button className="rounded bg-black px-3 text-white">Add</button>
-      {mut.isError && <span className="text-sm text-red-600">{(mut.error as Error).message}</span>}
+    <form onSubmit={handleSubmit((f) => mut.mutate(f))} className="flex flex-wrap items-end gap-3">
+      <label className="flex flex-col gap-1.5">
+        <span className="label">Name</span>
+        <input placeholder="Main Checking" {...register("name", { required: true })} />
+      </label>
+      <label className="flex flex-col gap-1.5">
+        <span className="label">Type</span>
+        <select aria-label="Account type" {...register("type")}>
+          {ACCOUNT_TYPES.map((t) => (
+            <option key={t} value={t}>
+              {prettyType(t)}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="flex flex-col gap-1.5">
+        <span className="label">Institution</span>
+        <input placeholder="Optional" {...register("institution")} />
+      </label>
+      <label className="flex flex-col gap-1.5">
+        <span className="label">Balance</span>
+        <input className="tnum w-32" placeholder="0.00" {...register("balance")} />
+      </label>
+      <button className="btn">Add</button>
+      {mut.isError && <span className="text-sm text-clay">{(mut.error as Error).message}</span>}
     </form>
+  );
+}
+
+export function ConnectBank() {
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-dashed border-line px-5 py-4">
+      <div>
+        <p className="text-sm">
+          Connect a bank <span className="ml-1 text-muted">— not built yet</span>
+        </p>
+        <p className="mt-1 max-w-lg text-[13px] leading-relaxed text-muted">
+          Automatic syncing needs a Plaid account and API keys. Until that lands, add accounts by
+          hand and import transactions from your bank's CSV export.
+        </p>
+      </div>
+      <span className="label shrink-0 rounded-full border border-line px-3 py-1.5">Milestone 2</span>
+    </div>
   );
 }

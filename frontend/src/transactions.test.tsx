@@ -8,21 +8,36 @@ vi.mock("./api/client", () => ({
   apiFetch: vi.fn(async () => [
     {
       id: "1",
-      posted_at: "2026-01-01T00:00:00Z",
+      posted_at: "2026-01-01T12:00:00Z",
       merchant_raw: "Starbucks",
       amount: "-9.99",
+      currency: "USD",
+    },
+    {
+      id: "2",
+      posted_at: "2026-01-02T12:00:00Z",
+      merchant_raw: "Payroll",
+      amount: "2500.00",
       currency: "USD",
     },
   ]),
 }));
 
-test("renders a transaction row", async () => {
-  const qc = new QueryClient();
+const renderList = () =>
   render(
-    <QueryClientProvider client={qc}>
+    <QueryClientProvider client={new QueryClient()}>
       <TransactionList />
     </QueryClientProvider>,
   );
+
+test("renders transactions with a short date", async () => {
+  renderList();
   expect(await screen.findByText("Starbucks")).toBeInTheDocument();
-  expect(screen.getByText("2026-01-01")).toBeInTheDocument();
+  expect(screen.getByText("Jan 1")).toBeInTheDocument();
+});
+
+test("signs amounts: outflow bare, inflow with a plus", async () => {
+  renderList();
+  expect(await screen.findByText("-$9.99")).toBeInTheDocument();
+  expect(screen.getByText("+$2,500.00")).toBeInTheDocument();
 });

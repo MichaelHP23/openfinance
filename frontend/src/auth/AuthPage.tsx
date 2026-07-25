@@ -7,8 +7,20 @@ type Form = { email: string; password: string };
 
 // ponytail: one component for both modes — the pages differ only in copy + endpoint.
 const MODES = {
-  register: { title: "Create account", cta: "Sign up", path: "/auth/register", alt: "/login", altText: "Have an account? Log in" },
-  login: { title: "Log in", cta: "Log in", path: "/auth/login", alt: "/register", altText: "Need an account? Sign up" },
+  register: {
+    title: "Create account",
+    cta: "Sign up",
+    path: "/auth/register",
+    alt: "/login",
+    altText: "Have an account? Log in",
+  },
+  login: {
+    title: "Welcome back",
+    cta: "Log in",
+    path: "/auth/login",
+    alt: "/register",
+    altText: "Need an account? Sign up",
+  },
 } as const;
 
 export function AuthPage({ mode }: { mode: keyof typeof MODES }) {
@@ -33,32 +45,70 @@ export function AuthPage({ mode }: { mode: keyof typeof MODES }) {
   };
 
   return (
-    <form
-      onSubmit={handleSubmit(onSubmit)}
-      className="mx-auto mt-24 flex max-w-sm flex-col gap-3 p-4"
-    >
-      <h1 className="text-xl font-semibold">{m.title}</h1>
-      <input
-        className="rounded border p-2"
-        placeholder="Email"
-        type="email"
-        {...register("email", { required: "Email is required" })}
-      />
-      {errors.email && <span className="text-sm text-red-600">{errors.email.message}</span>}
-      <input
-        className="rounded border p-2"
-        type="password"
-        placeholder="Password"
-        {...register("password", { required: "Password is required", minLength: { value: 6, message: "At least 6 characters" } })}
-      />
-      {errors.password && <span className="text-sm text-red-600">{errors.password.message}</span>}
-      {errors.root && <span className="text-sm text-red-600">{errors.root.message}</span>}
-      <button disabled={isSubmitting} className="rounded bg-black p-2 text-white">
-        {m.cta}
-      </button>
-      <Link to={m.alt} className="text-sm text-blue-600">
-        {m.altText}
-      </Link>
-    </form>
+    <div className="grid min-h-screen lg:grid-cols-2">
+      <aside className="relative hidden flex-col justify-between border-r border-line p-12 lg:flex">
+        <div className="flex items-baseline gap-2">
+          <span className="font-display text-3xl leading-none text-acid">O</span>
+          <span className="text-sm font-medium tracking-[0.2em] uppercase">Finance</span>
+        </div>
+        <div>
+          <p className="font-display text-5xl leading-[1.05] text-balance">
+            Every account, every transaction, <em className="text-acid">in one place.</em>
+          </p>
+          <p className="mt-5 max-w-sm text-sm leading-relaxed text-muted">
+            Self-hosted. Your data lives in your database, on your machine — no third party
+            watching your spending.
+          </p>
+        </div>
+        <p className="label">Household finance · self-hosted</p>
+      </aside>
+
+      <main className="flex items-center justify-center p-6">
+        <form onSubmit={handleSubmit(onSubmit)} className="rise flex w-full max-w-sm flex-col gap-4">
+          <h1 className="font-display text-4xl">{m.title}</h1>
+
+          <label className="flex flex-col gap-1.5">
+            <span className="label">Email</span>
+            <input
+              type="email"
+              placeholder="Email"
+              autoComplete="email"
+              {...register("email", { required: "Email is required" })}
+            />
+          </label>
+          {errors.email && <span className="text-sm text-clay">{errors.email.message}</span>}
+
+          <label className="flex flex-col gap-1.5">
+            <span className="label">Password</span>
+            <input
+              type="password"
+              placeholder="Password"
+              autoComplete={mode === "login" ? "current-password" : "new-password"}
+              {...register("password", {
+                required: "Password is required",
+                minLength: { value: 6, message: "At least 6 characters" },
+              })}
+            />
+          </label>
+          {errors.password && <span className="text-sm text-clay">{errors.password.message}</span>}
+          {errors.root && (
+            <span className="rounded-lg border border-clay/40 bg-clay/10 px-3 py-2 text-sm text-clay">
+              {errors.root.message}
+            </span>
+          )}
+
+          <button disabled={isSubmitting} className="btn mt-1 w-full">
+            {isSubmitting ? "…" : m.cta}
+          </button>
+
+          <Link
+            to={m.alt}
+            className="btn-ghost w-full text-center transition-colors hover:text-acid"
+          >
+            {m.altText}
+          </Link>
+        </form>
+      </main>
+    </div>
   );
 }

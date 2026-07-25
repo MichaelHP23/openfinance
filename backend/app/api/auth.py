@@ -24,7 +24,13 @@ def _set_cookie(resp: Response, token: str) -> None:
 
 
 def _out(u: User) -> UserOut:
-    return UserOut(id=u.id, email=u.email, role=u.role.value, household_id=u.household_id)
+    return UserOut(
+        id=u.id,
+        email=u.email,
+        role=u.role.value,
+        household_id=u.household_id,
+        local_mode=settings.local_mode,
+    )
 
 
 @router.post("/register", response_model=UserOut)
@@ -41,7 +47,7 @@ def register(
 
 
 @router.post("/login", response_model=UserOut)
-@limiter.limit("10/minute")
+@limiter.limit("30/minute")
 def login(
     body: Credentials, request: Request, response: Response, db: Session = Depends(get_db)
 ) -> UserOut:

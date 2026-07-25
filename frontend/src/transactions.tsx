@@ -1,44 +1,56 @@
 import { useState } from "react";
 import { useForm } from "react-hook-form";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { API_BASE, apiFetch } from "./api/client";
+import { useTransactions, type Txn } from "./data";
+import { shortDate, usd } from "./money";
+import { Empty } from "./ui/Shell";
 
-export type Txn = {
-  id: string;
-  posted_at: string;
-  merchant_raw: string;
-  amount: string;
-  currency: string;
-};
+export function TxnRows({ txns }: { txns: Txn[] }) {
+  return (
+    <table className="w-full">
+      <tbody>
+        {txns.map((t, i) => (
+          <tr
+            key={t.id}
+            className="rise border-b border-line/60 transition-colors last:border-0 hover:bg-[rgba(237,234,228,0.02)]"
+            style={{ "--d": `${Math.min(i, 12) * 30}ms` } as React.CSSProperties}
+          >
+            <td className="tnum w-24 py-3 text-[13px] text-muted">{shortDate(t.posted_at)}</td>
+            <td className="py-3 text-sm">{t.merchant_raw}</td>
+            <td
+              className={`tnum py-3 text-right text-sm ${
+                Number(t.amount) > 0 ? "text-acid" : "text-bone"
+              }`}
+            >
+              {Number(t.amount) > 0 ? `+${usd(t.amount)}` : usd(t.amount)}
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
 
 export function TransactionList() {
   const [search, setSearch] = useState("");
-  const { data = [] } = useQuery({
-    queryKey: ["transactions", search],
-    queryFn: () =>
-      apiFetch<Txn[]>(`/transactions${search ? `?search=${encodeURIComponent(search)}` : ""}`),
-  });
+  const { data = [], isLoading } = useTransactions(search);
+
   return (
     <div>
       <input
-        className="mb-2 w-full rounded border p-2"
+        className="mb-3 w-full"
         placeholder="Search merchant…"
         value={search}
         onChange={(e) => setSearch(e.target.value)}
       />
-      <table className="w-full text-sm">
-        <tbody>
-          {data.map((t) => (
-            <tr key={t.id} className="border-b">
-              <td className="p-2">{t.posted_at.slice(0, 10)}</td>
-              <td className="p-2">{t.merchant_raw}</td>
-              <td className="p-2 text-right">
-                {t.currency} {t.amount}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      {isLoading ? (
+        <Empty>Loading…</Empty>
+      ) : data.length === 0 ? (
+        <Empty>{search ? `Nothing matching “${search}”.` : "No transactions yet."}</Empty>
+      ) : (
+        <TxnRows txns={data} />
+      )}
     </div>
   );
 }
@@ -65,29 +77,30 @@ export function NewTransactionForm({ accountId }: { accountId: string }) {
       reset();
     },
   });
+
   return (
-    <form onSubmit={handleSubmit((f) => mut.mutate(f))} className="flex flex-wrap gap-2">
-      <input
-        className="rounded border p-2"
-        type="date"
-        aria-label="Date"
-        {...register("posted_at", { required: true })}
-      />
-      <input
-        className="rounded border p-2"
-        placeholder="Merchant"
-        {...register("merchant_raw", { required: true })}
-      />
-      <input
-        className="w-28 rounded border p-2"
-        aria-label="Amount"
-        placeholder="-9.99"
-        {...register("amount", { required: true })}
-      />
-      <button disabled={!accountId} className="rounded bg-black px-3 text-white">
+    <form onSubmit={handleSubmit((f) => mut.mutate(f))} className="flex flex-wrap items-end gap-3">
+      <label className="flex flex-col gap-1.5">
+        <span className="label">Date</span>
+        <input type="date" aria-label="Date" {...register("posted_at", { required: true })} />
+      </label>
+      <label className="flex flex-1 flex-col gap-1.5">
+        <span className="label">Merchant</span>
+        <input placeholder="Merchant" {...register("merchant_raw", { required: true })} />
+      </label>
+      <label className="flex flex-col gap-1.5">
+        <span className="label">Amount</span>
+        <input
+          className="tnum w-32"
+          aria-label="Amount"
+          placeholder="-9.99"
+          {...register("amount", { required: true })}
+        />
+      </label>
+      <button disabled={!accountId} className="btn">
         Add transaction
       </button>
-      {mut.isError && <span className="text-sm text-red-600">{(mut.error as Error).message}</span>}
+      {mut.isError && <span className="text-sm text-clay">{(mut.error as Error).message}</span>}
     </form>
   );
 }
@@ -107,16 +120,22 @@ export function CsvUpload({ accountId }: { accountId: string }) {
       body,
     });
     const out = await res.json().catch(() => ({}));
-    setStatus(res.ok ? `Imported ${out.imported}, skipped ${out.skipped}` : (out.detail ?? "Import failed"));
+    setStatus(
+      res.ok ? `Imported ${out.imported}, skipped ${out.skipped}` : (out.detail ?? "Import failed"),
+    );
     qc.invalidateQueries({ queryKey: ["transactions"] });
     e.target.value = "";
   };
 
   return (
-    <label className="flex items-center gap-2 text-sm">
-      <span>Import CSV</span>
-      <input type="file" accept=".csv" aria-label="Import CSV" onChange={onFile} />
-      {status && <span className="text-gray-600">{status}</span>}
-    </label>
+    <div className="flex flex-wrap items-center gap-3">
+      <label className="flex flex-col gap-1.5">
+        <span className="label">Import CSV</span>
+        <input type="file" accept=".csv" aria-label="Import CSV" onChange={onFile} />
+      </label>
+      <span className="text-[13px] text-muted">
+        {status || "Columns: date, amount, merchant. Re-importing the same file is deduped."}
+      </span>
+    </div>
   );
 }

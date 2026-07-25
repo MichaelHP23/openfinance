@@ -7,6 +7,11 @@ from app.api import accounts, auth, imports, transactions
 from app.api.deps import limiter
 from app.core.config import settings
 
+if settings.local_mode and settings.environment != "development":
+    # LOCAL_MODE disables authentication outright. Refuse to start in any config that
+    # looks like it faces a network.
+    raise RuntimeError("LOCAL_MODE requires ENVIRONMENT=development — it has no authentication")
+
 app = FastAPI(title="OpenFinance API")
 app.add_middleware(
     CORSMiddleware,

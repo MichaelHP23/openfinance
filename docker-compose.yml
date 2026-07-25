@@ -23,6 +23,8 @@ services:
       # In-container hosts always win over whatever .env has for local dev.
       DATABASE_URL: postgresql+psycopg://openfinance:openfinance@postgres:5432/openfinance
       REDIS_URL: redis://redis:6379/0
+      # Single-user desktop install: no login. Only safe because this binds to localhost.
+      LOCAL_MODE: "true"
     depends_on:
       postgres: {condition: service_healthy}
       redis: {condition: service_started}
@@ -35,5 +37,10 @@ services:
       VITE_API_URL: http://localhost:8000
     depends_on: [api]
     ports: ["5173:5173"]
+    # Live source, so editing a file reloads the browser instead of needing a rebuild.
+    # The anonymous volume keeps the image's node_modules (Linux binaries) in place.
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
 volumes:
   pgdata:

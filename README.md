@@ -13,11 +13,27 @@ cp backend/.env.example backend/.env   # then set APP_SECRET_KEY
 docker compose up -d
 ```
 
+Open http://localhost:5173. There's no sign-up — see local mode below.
+
 - API → http://localhost:8000 (docs at `/docs`)
 - Web → http://localhost:5173
 - Postgres → `localhost:5433` (5432 inside the network)
 
 Migrations run automatically when the `api` container starts.
+
+## Local mode
+
+Compose sets `LOCAL_MODE=true`, which runs the whole app as one household with **no
+login at all** — a single-user desktop install shouldn't make you authenticate against
+yourself. The local household is created on first request.
+
+This means anyone who can reach the API can read and write your finances, so it only
+holds while the ports stay bound to localhost. The API refuses to start with
+`LOCAL_MODE=true` unless `ENVIRONMENT=development`.
+
+Putting this on a network? Set `LOCAL_MODE=false` and the email/password auth
+(argon2id, server-side sessions, rate limits) takes over — `/register` and `/login`
+are already built and tested.
 
 ## Local development
 

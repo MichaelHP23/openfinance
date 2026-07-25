@@ -26,6 +26,11 @@ distinguish "not yours" from "doesn't exist". Isolation is covered by
 
 ## Auth
 
+`LOCAL_MODE` short-circuits `current_user` to one auto-created local household, so a
+single-user desktop install has no login. It is refused unless
+`ENVIRONMENT=development`, because it removes authentication entirely. Everything below
+describes the hosted path (`LOCAL_MODE=false`), which stays fully wired either way.
+
 - Passwords: argon2id via `argon2-cffi`.
 - Sessions: opaque `secrets.token_urlsafe(32)` in an httpOnly, SameSite=Lax cookie;
   only `sha256(token)` is stored, with a 30-day expiry checked on every resolve.
