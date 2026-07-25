@@ -1,0 +1,29 @@
+import hashlib
+import os
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from app.core.config import settings
+
+_KEK = hashlib.sha256(settings.app_secret_key.encode()).digest()  # 32-byte KEK
+
+
+def _seal(key: bytes, data: bytes) -> bytes:
+    nonce = os.urandom(12)
+    return nonce + AESGCM(key).encrypt(nonce, data, None)
+
+
+def _open(key: bytes, blob: bytes) -> bytes:
+    nonce, ct = blob[:12], blob[12:]
+    return AESGCM(key).decrypt(nonce, ct, None)
+
+
+def encrypt(plaintext: bytes) -> bytes:
+    dek = os.urandom(32)
+    wrapped = _seal(_KEK, dek)                       # 12 + 32 + 16 = 60 bytes
+    return len(wrapped).to_bytes(2, "big") + wrapped + _seal(dek, plaintext)
+
+
+def decrypt(blob: bytes) -> bytes:
+    wlen = int.from_bytes(blob[:2], "big")
+    wrapped, body = blob[2 : 2 + wlen], blob[2 + wlen :]
+    dek = _open(_KEK, wrapped)
+    return _open(dek, body)
