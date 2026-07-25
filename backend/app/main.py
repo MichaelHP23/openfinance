@@ -12,10 +12,16 @@ if settings.local_mode and settings.environment != "development":
     # looks like it faces a network.
     raise RuntimeError("LOCAL_MODE requires ENVIRONMENT=development — it has no authentication")
 
+# Vite hops to the next free port whenever one is taken, so a dev frontend can land on
+# any of 5173/5174/5175/… Listing them one by one is whack-a-mole; in development, trust
+# loopback on any port. Anything else stays on the exact allowlist.
+LOOPBACK_ORIGIN_RE = r"^http://(localhost|127\.0\.0\.1)(:\d+)?$"
+
 app = FastAPI(title="OpenFinance API")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origin_list,
+    allow_origin_regex=LOOPBACK_ORIGIN_RE if settings.environment == "development" else None,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
