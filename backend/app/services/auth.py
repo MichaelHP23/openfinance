@@ -1,12 +1,14 @@
 import hashlib
 import secrets
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+
 from app.core.security import hash_password, verify_password
 from app.models.household import Household
-from app.models.user import User, Role
 from app.models.session import UserSession
+from app.models.user import Role, User
 
 SESSION_TTL = timedelta(days=30)
 
@@ -50,7 +52,7 @@ def issue_session(db: Session, user: User) -> str:
         UserSession(
             user_id=user.id,
             token_hash=_hash_token(raw),
-            expires_at=datetime.now(timezone.utc) + SESSION_TTL,
+            expires_at=datetime.now(UTC) + SESSION_TTL,
         )
     )
     db.commit()
@@ -58,9 +60,7 @@ def issue_session(db: Session, user: User) -> str:
 
 
 def resolve_session(db: Session, raw_token: str) -> User | None:
-    sess = db.scalar(
-        select(UserSession).where(UserSession.token_hash == _hash_token(raw_token))
-    )
-    if not sess or sess.expires_at < datetime.now(timezone.utc):
+    sess = db.scalar(select(UserSession).where(UserSession.token_hash == _hash_token(raw_token)))
+    if not sess or sess.expires_at < datetime.now(UTC):
         return None
     return db.get(User, sess.user_id)

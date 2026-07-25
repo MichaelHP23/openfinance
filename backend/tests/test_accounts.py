@@ -1,7 +1,8 @@
 from decimal import Decimal
+
 from app.models.household import Household
-from app.services import accounts
 from app.schemas.account import AccountCreate
+from app.services import accounts
 
 
 def _household(db) -> Household:
@@ -22,6 +23,7 @@ def test_create_and_list(db):
 
 def test_rejects_non_usd(db):
     import pytest
+
     hid = _household(db).id
     with pytest.raises(ValueError):
         accounts.create(db, hid, AccountCreate(type="cash", name="x", currency="EUR"))

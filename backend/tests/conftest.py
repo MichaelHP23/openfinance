@@ -2,8 +2,9 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from testcontainers.postgres import PostgresContainer
-from app.models.base import Base
+
 import app.models  # noqa: F401  ensure all models imported/registered
+from app.models.base import Base
 
 
 @pytest.fixture(scope="session")

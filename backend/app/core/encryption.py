@@ -1,6 +1,8 @@
 import hashlib
 import os
+
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
 from app.core.config import settings
 
 _KEK = hashlib.sha256(settings.app_secret_key.encode()).digest()  # 32-byte KEK
@@ -18,7 +20,7 @@ def _open(key: bytes, blob: bytes, aad: bytes | None = None) -> bytes:
 
 def encrypt(plaintext: bytes, aad: bytes = b"") -> bytes:
     dek = os.urandom(32)
-    wrapped = _seal(_KEK, dek)                       # 12 + 32 + 16 = 60 bytes
+    wrapped = _seal(_KEK, dek)  # 12 + 32 + 16 = 60 bytes
     return len(wrapped).to_bytes(2, "big") + wrapped + _seal(dek, plaintext, aad)
 
 

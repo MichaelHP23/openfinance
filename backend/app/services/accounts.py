@@ -1,6 +1,8 @@
 import uuid
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+
 from app.models.account import Account, AccountType
 from app.schemas.account import AccountCreate
 
@@ -11,8 +13,12 @@ def create(db: Session, household_id: uuid.UUID, data: AccountCreate) -> Account
     if data.currency != SUPPORTED_CURRENCY:
         raise ValueError("Only USD supported in v1")
     acct = Account(
-        household_id=household_id, type=AccountType(data.type), name=data.name,
-        institution=data.institution, currency=data.currency, balance=data.balance,
+        household_id=household_id,
+        type=AccountType(data.type),
+        name=data.name,
+        institution=data.institution,
+        currency=data.currency,
+        balance=data.balance,
         is_manual=True,
     )
     db.add(acct)

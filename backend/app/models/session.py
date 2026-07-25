@@ -1,9 +1,11 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import ForeignKey, DateTime
+
+from sqlalchemy import DateTime, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
-from app.models.base import Base, UUIDMixin, TimestampMixin
+
+from app.models.base import Base, TimestampMixin, UUIDMixin
 
 
 class UserSession(Base, UUIDMixin, TimestampMixin):

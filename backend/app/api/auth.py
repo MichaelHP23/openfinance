@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy.orm import Session
+
 from app.api.deps import current_user, limiter
 from app.core.config import settings
 from app.core.db import get_db
@@ -13,8 +14,12 @@ COOKIE = "session"
 
 def _set_cookie(resp: Response, token: str) -> None:
     resp.set_cookie(
-        COOKIE, token, httponly=True, samesite="lax",
-        secure=settings.environment != "development", max_age=60 * 60 * 24 * 30,
+        COOKIE,
+        token,
+        httponly=True,
+        samesite="lax",
+        secure=settings.environment != "development",
+        max_age=60 * 60 * 24 * 30,
     )
 
 
@@ -24,7 +29,9 @@ def _out(u: User) -> UserOut:
 
 @router.post("/register", response_model=UserOut)
 @limiter.limit("5/minute")
-def register(body: Credentials, request: Request, response: Response, db: Session = Depends(get_db)):
+def register(
+    body: Credentials, request: Request, response: Response, db: Session = Depends(get_db)
+) -> UserOut:
     try:
         user = auth.register(db, body.email, body.password)
     except auth.EmailTaken:
@@ -35,7 +42,9 @@ def register(body: Credentials, request: Request, response: Response, db: Sessio
 
 @router.post("/login", response_model=UserOut)
 @limiter.limit("10/minute")
-def login(body: Credentials, request: Request, response: Response, db: Session = Depends(get_db)):
+def login(
+    body: Credentials, request: Request, response: Response, db: Session = Depends(get_db)
+) -> UserOut:
     user = auth.authenticate(db, body.email, body.password)
     if not user:
         raise HTTPException(status_code=401, detail="Invalid credentials")
@@ -44,11 +53,11 @@ def login(body: Credentials, request: Request, response: Response, db: Session =
 
 
 @router.post("/logout")
-def logout(response: Response):
+def logout(response: Response) -> dict[str, str]:
     response.delete_cookie(COOKIE)
     return {"status": "ok"}
 
 
 @router.get("/me", response_model=UserOut)
-def me(user: User = Depends(current_user)):
+def me(user: User = Depends(current_user)) -> UserOut:
     return _out(user)

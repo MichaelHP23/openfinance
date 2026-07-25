@@ -1,16 +1,24 @@
 import enum
 import uuid
 from decimal import Decimal
-from sqlalchemy import ForeignKey, Enum, Numeric, String, Boolean
+
+from sqlalchemy import Boolean, Enum, ForeignKey, Numeric, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
-from app.models.base import Base, UUIDMixin, TimestampMixin
+
+from app.models.base import Base, TimestampMixin, UUIDMixin
 
 
 class AccountType(str, enum.Enum):
-    checking = "checking"; savings = "savings"; credit_card = "credit_card"
-    loan = "loan"; investment = "investment"; crypto = "crypto"
-    cash = "cash"; asset = "asset"; liability = "liability"
+    checking = "checking"
+    savings = "savings"
+    credit_card = "credit_card"
+    loan = "loan"
+    investment = "investment"
+    crypto = "crypto"
+    cash = "cash"
+    asset = "asset"
+    liability = "liability"
 
 
 class Account(Base, UUIDMixin, TimestampMixin):
@@ -25,5 +33,5 @@ class Account(Base, UUIDMixin, TimestampMixin):
     name: Mapped[str] = mapped_column()
     institution: Mapped[str | None] = mapped_column(nullable=True)
     currency: Mapped[str] = mapped_column(String(3), default="USD")
-    balance: Mapped[Decimal] = mapped_column(Numeric(19, 4), default=Decimal("0"))
+    balance: Mapped[Decimal] = mapped_column(Numeric(19, 4), default=Decimal(0))
     is_manual: Mapped[bool] = mapped_column(Boolean, default=True)

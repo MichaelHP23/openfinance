@@ -1,6 +1,7 @@
 import uuid
-from app.providers.manual import ManualProvider
+
 from app.providers.base import BankProvider, get_credentials
+from app.providers.manual import ManualProvider
 
 
 def test_manual_provider_satisfies_protocol():

@@ -1,5 +1,6 @@
 import uuid
 from decimal import Decimal
+
 from pydantic import BaseModel
 
 
@@ -8,7 +9,7 @@ class AccountCreate(BaseModel):
     name: str
     institution: str | None = None
     currency: str = "USD"
-    balance: Decimal = Decimal("0")
+    balance: Decimal = Decimal(0)
 
 
 class AccountOut(BaseModel):

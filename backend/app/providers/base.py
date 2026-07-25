@@ -3,8 +3,11 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
-from typing import Protocol
-from app.core.encryption import encrypt, decrypt
+from typing import Any, Protocol
+
+Credentials = dict[str, Any]
+
+from app.core.encryption import decrypt, encrypt
 from app.models.connection import ProviderConnection
 
 
@@ -30,9 +33,13 @@ class TxnDTO:
 class BankProvider(Protocol):
     name: str
 
-    def link_account(self, household_id: uuid.UUID, credentials: dict) -> ProviderConnection: ...
+    def link_account(
+        self, household_id: uuid.UUID, credentials: Credentials
+    ) -> ProviderConnection: ...
     def fetch_accounts(self, conn: ProviderConnection) -> list[AccountDTO]: ...
-    def fetch_transactions(self, conn: ProviderConnection, since: datetime | None) -> list[TxnDTO]: ...
+    def fetch_transactions(
+        self, conn: ProviderConnection, since: datetime | None
+    ) -> list[TxnDTO]: ...
 
 
 def _context_aad(conn: ProviderConnection) -> bytes:
@@ -41,9 +48,12 @@ def _context_aad(conn: ProviderConnection) -> bytes:
     return f"{conn.household_id}:{conn.provider.value}".encode()
 
 
-def set_credentials(conn: ProviderConnection, creds: dict) -> None:
+def set_credentials(conn: ProviderConnection, creds: Credentials) -> None:
     conn.encrypted_credentials = encrypt(json.dumps(creds).encode(), aad=_context_aad(conn))
 
 
-def get_credentials(conn: ProviderConnection) -> dict:
-    return json.loads(decrypt(conn.encrypted_credentials, aad=_context_aad(conn)).decode())
+def get_credentials(conn: ProviderConnection) -> Credentials:
+    creds: Credentials = json.loads(
+        decrypt(conn.encrypted_credentials, aad=_context_aad(conn)).decode()
+    )
+    return creds

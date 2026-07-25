@@ -5,10 +5,28 @@ services:
       POSTGRES_USER: openfinance
       POSTGRES_PASSWORD: openfinance
       POSTGRES_DB: openfinance
-    ports: ["5432:5432"]
+    ports: ["5433:5432"]
     volumes: ["pgdata:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U openfinance"]
+      interval: 5s
+      retries: 10
   redis:
     image: redis:7
     ports: ["6379:6379"]
+  api:
+    build: ./backend
+    env_file:
+      - path: ./backend/.env
+        required: false
+    environment:
+      # In-container hosts always win over whatever .env has for local dev.
+      DATABASE_URL: postgresql+psycopg://openfinance:openfinance@postgres:5432/openfinance
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_started}
+    ports: ["8000:8000"]
+    command: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"
 volumes:
   pgdata:

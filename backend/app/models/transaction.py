@@ -1,10 +1,12 @@
 import uuid
 from datetime import datetime
 from decimal import Decimal
-from sqlalchemy import ForeignKey, Numeric, String, DateTime
+
+from sqlalchemy import DateTime, ForeignKey, Numeric, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
-from app.models.base import Base, UUIDMixin, TimestampMixin
+
+from app.models.base import Base, TimestampMixin, UUIDMixin
 
 
 class Transaction(Base, UUIDMixin, TimestampMixin):

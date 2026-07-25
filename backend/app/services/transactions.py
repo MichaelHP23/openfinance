@@ -1,7 +1,9 @@
 import uuid
 from datetime import datetime
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+
 from app.models.transaction import Transaction
 from app.schemas.transaction import TxnCreate, TxnUpdate
 from app.services import accounts
@@ -19,9 +21,14 @@ def _assert_account(db: Session, household_id: uuid.UUID, account_id: uuid.UUID)
 def create(db: Session, household_id: uuid.UUID, data: TxnCreate) -> Transaction:
     _assert_account(db, household_id, data.account_id)
     txn = Transaction(
-        household_id=household_id, account_id=data.account_id, posted_at=data.posted_at,
-        amount=data.amount, currency=data.currency, merchant_raw=data.merchant_raw,
-        category_id=data.category_id, notes=data.notes,
+        household_id=household_id,
+        account_id=data.account_id,
+        posted_at=data.posted_at,
+        amount=data.amount,
+        currency=data.currency,
+        merchant_raw=data.merchant_raw,
+        category_id=data.category_id,
+        notes=data.notes,
     )
     db.add(txn)
     db.commit()
@@ -30,9 +37,13 @@ def create(db: Session, household_id: uuid.UUID, data: TxnCreate) -> Transaction
 
 
 def list_for(
-    db: Session, household_id: uuid.UUID, *,
-    account_id: uuid.UUID | None = None, since: datetime | None = None,
-    until: datetime | None = None, search: str | None = None,
+    db: Session,
+    household_id: uuid.UUID,
+    *,
+    account_id: uuid.UUID | None = None,
+    since: datetime | None = None,
+    until: datetime | None = None,
+    search: str | None = None,
 ) -> list[Transaction]:
     q = select(Transaction).where(Transaction.household_id == household_id)
     if account_id:
@@ -54,7 +65,9 @@ def get(db: Session, household_id: uuid.UUID, txn_id: uuid.UUID) -> Transaction 
     )
 
 
-def update(db: Session, household_id: uuid.UUID, txn_id: uuid.UUID, data: TxnUpdate) -> Transaction | None:
+def update(
+    db: Session, household_id: uuid.UUID, txn_id: uuid.UUID, data: TxnUpdate
+) -> Transaction | None:
     txn = get(db, household_id, txn_id)
     if not txn:
         return None

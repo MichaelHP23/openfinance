@@ -1,6 +1,7 @@
 from fastapi.testclient import TestClient
-from app.main import app
+
 from app.core.db import get_db
+from app.main import app
 
 app.state.limiter.enabled = False
 
