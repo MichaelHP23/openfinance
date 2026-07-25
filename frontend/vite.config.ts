@@ -1,4 +1,5 @@
-import { defineConfig } from 'vite'
+// vitest/config, not vite — it's the one whose type knows about `test`.
+import { defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 

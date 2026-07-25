@@ -76,6 +76,16 @@ npm run lint
   import your bank's CSV export.
 - Budgets, categorization rules, investments, reports. See the roadmap in the design spec.
 
+## Don't run `npm audit fix --force`
+
+`react-router-dom` is pinned to 7.18.1 with an `overrides` entry. `--force` "fixes" it by
+downgrading to 7.11.0, which trades one advisory for fourteen — including an RCE and
+several XSS/DoS — and then audit tells you to `--force` back. It loops.
+
+7.18.1's only advisory is [GHSA-qwww-vcr4-c8h2](https://github.com/advisories/GHSA-qwww-vcr4-c8h2),
+an RSC-mode CSRF bypass. This is a plain SPA with no RSC, so it doesn't apply. `npm audit`
+can't tell, because it matches version ranges, not usage. Revisit when a 7.x release clears it.
+
 ## Docs
 
 - [Architecture](docs/ARCHITECTURE.md)

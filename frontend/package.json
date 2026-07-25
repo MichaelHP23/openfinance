@@ -20,7 +20,17 @@
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "react-hook-form": "^7.83.0",
-    "react-router-dom": "^7.11.0"
+    "react-router-dom": "7.18.1"
+  },
+  "//react-router": [
+    "Pinned exact, and overridden below, on purpose. DO NOT run `npm audit fix --force`:",
+    "it downgrades to 7.11.0, which carries 14 advisories including an RCE and several",
+    "XSS/DoS. 7.18.1's only advisory (GHSA-qwww-vcr4-c8h2) is an RSC-mode CSRF bypass,",
+    "and this app is a plain SPA with no RSC, so it does not apply. Revisit when a 7.x",
+    "release lands that clears it."
+  ],
+  "overrides": {
+    "react-router": "7.18.1"
   },
   "devDependencies": {
     "@playwright/test": "^1.62.0",

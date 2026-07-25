@@ -19,7 +19,7 @@ describe("apiFetch", () => {
   });
 
   it("sends cookies", async () => {
-    const spy = vi.fn(async () => new Response("{}", { status: 200 }));
+    const spy = vi.fn(async (_url: string, _init?: RequestInit) => new Response("{}", { status: 200 }));
     vi.stubGlobal("fetch", spy);
     await apiFetch("/x");
     expect(spy.mock.calls[0][1]).toMatchObject({ credentials: "include" });
