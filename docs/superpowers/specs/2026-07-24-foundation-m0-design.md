@@ -105,7 +105,7 @@ DTOs (`AccountDTO`, `TxnDTO`) decouple provider payloads from ORM models.
 
 - **Passwords:** argon2id hashing (`argon2-cffi`).
 - **Sessions:** server-side (`sessions` table), opaque token in httpOnly + SameSite=Lax + Secure cookie. No JWT in v1.
-- **CSRF:** double-submit token required on all state-changing requests.
+- **CSRF:** M0 mitigation is `SameSite=Lax` session cookies (blocks classic cross-site CSRF). Full double-submit CSRF token on all state-changing requests is **deferred to M10 (Auth hardening)**, added once with frontend support in a single coherent pass.
 - **Credential encryption at rest:** envelope encryption. KEK from `APP_SECRET_KEY` env var; per-connection DEK; ciphertext + wrapped DEK stored in `provider_connections.encrypted_credentials`. Lives in `core/encryption.py`. AES-GCM (`cryptography` lib).
 - **Rate limiting:** auth endpoints throttled (slowapi + Redis).
 - **Tenancy enforcement:** a `require_household` FastAPI dependency resolves `household_id` from the session; every service query filters by it. No endpoint can read cross-household. Covered by explicit isolation tests.
@@ -151,7 +151,7 @@ DTOs (`AccountDTO`, `TxnDTO`) decouple provider payloads from ORM models.
 | **M7 Goals** | Savings, debt payoff, emergency fund, vacation/investment/mortgage/student-loan; avalanche/snowball/custom strategies. |
 | **M8 Reports + export** | Income vs expenses, trends, category/merchant/subscription analysis, net worth history, tax reports, CSV + PDF export. |
 | **M9 Automation** | Recurring/subscription/income/transfer detection, subscription price-increase alerts, anomaly detection. |
-| **M10 Auth hardening** | OAuth providers, passkeys, 2FA, RBAC expansion, audit logs, session management UI. |
+| **M10 Auth hardening** | CSRF double-submit tokens (deferred from M0), OAuth providers, passkeys, 2FA, RBAC expansion, audit logs, session management UI. |
 | **M11 Plugin system** | Extension boundary decision (subprocess/WASM sandbox), plugin API for importers/reports/providers/dashboards/AI tools/notifications. |
 | **M12 Mobile / PWA** | Responsive polish, PWA install, offline read cache. React Native later, reusing the same API. |
 
