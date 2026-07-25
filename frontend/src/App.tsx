@@ -23,13 +23,21 @@ function Protected({ children }: { children: ReactNode }) {
   return <Shell localMode={data.local_mode}>{children}</Shell>;
 }
 
+/** A local install has no accounts to sign in to — send those URLs home. */
+function AuthRoute({ mode }: { mode: "login" | "register" }) {
+  const { data, isLoading } = useMe();
+  if (isLoading) return <div className="p-10 text-sm text-muted">Loading…</div>;
+  if (data?.local_mode) return <Navigate to="/" replace />;
+  return <AuthPage mode={mode} />;
+}
+
 export default function App() {
   return (
     <QueryClientProvider client={qc}>
       <BrowserRouter>
         <Routes>
-          <Route path="/login" element={<AuthPage mode="login" />} />
-          <Route path="/register" element={<AuthPage mode="register" />} />
+          <Route path="/login" element={<AuthRoute mode="login" />} />
+          <Route path="/register" element={<AuthRoute mode="register" />} />
           <Route
             path="/"
             element={
