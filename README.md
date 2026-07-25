@@ -1,8 +1,13 @@
 # OpenFinance
 
-Self-hosted household finance tracking. Server-authoritative FastAPI backend over
-PostgreSQL, React 19 frontend. Every financial row is scoped to a household, provider
-credentials are encrypted at rest, and money is `NUMERIC(19,4)` / `Decimal` end to end.
+A personal finance tracker you run yourself. Accounts, transactions, CSV import from
+your bank, and an overview of where the money actually goes — on your machine, in your
+Postgres, with nothing phoning home.
+
+FastAPI over PostgreSQL, React 19 frontend. Money is `NUMERIC(19,4)` / `Decimal` end to
+end, never float. Every financial row is scoped to a household, and provider credentials
+are encrypted at rest — so the same code runs multi-user if you ever want it to, but the
+default install is single-user with no login.
 
 *(`openfinance` is a working name.)*
 
@@ -55,13 +60,21 @@ npm run typecheck
 npm run lint
 ```
 
-## What's here (M0)
+## What's here
 
-- Email/password auth: argon2id hashes, opaque server-side session cookies, rate limits.
-- Household tenancy: every account/transaction read and write filters on `household_id`.
+- **Overview** — net worth, monthly cash flow, top merchants, recent activity.
+- **Accounts** — nine account types, assets and liabilities netted correctly.
+- **Transactions** — manual entry, merchant search, CSV import that dedups on re-import.
+- Local mode (no login) or full email/password auth: argon2id, server-side sessions,
+  rate limits.
 - `BankProvider` protocol with a `ManualProvider`; credentials sealed with AES-GCM
   envelope encryption bound to the household + provider context.
-- Accounts, categories, transactions (manual entry, filtering, CSV import with dedup).
+
+## Not here yet
+
+- **Bank syncing.** Needs Plaid API keys — that's the next milestone. Until then,
+  import your bank's CSV export.
+- Budgets, categorization rules, investments, reports. See the roadmap in the design spec.
 
 ## Docs
 
