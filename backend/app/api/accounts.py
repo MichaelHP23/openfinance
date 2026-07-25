@@ -1,0 +1,25 @@
+import uuid
+from fastapi import APIRouter, Depends
+from sqlalchemy.orm import Session
+from app.api.deps import require_household
+from app.core.db import get_db
+from app.schemas.account import AccountCreate, AccountOut
+from app.services import accounts
+
+router = APIRouter(prefix="/accounts", tags=["accounts"])
+
+
+@router.post("", response_model=AccountOut)
+def create_account(
+    body: AccountCreate,
+    hid: uuid.UUID = Depends(require_household),
+    db: Session = Depends(get_db),
+):
+    return accounts.create(db, hid, body)
+
+
+@router.get("", response_model=list[AccountOut])
+def list_accounts(
+    hid: uuid.UUID = Depends(require_household), db: Session = Depends(get_db)
+):
+    return accounts.list_for(db, hid)
