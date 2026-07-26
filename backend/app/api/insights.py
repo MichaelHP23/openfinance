@@ -10,6 +10,7 @@ from app.core.db import get_db
 from app.providers.llm import ClaudeProvider, LLMError
 from app.services import digest as digest_service
 from app.services import insights as insights_service
+from app.services import investments as investments_service
 from app.services import snapshots as snapshots_service
 
 router = APIRouter(tags=["insights"])
@@ -77,3 +78,10 @@ def net_worth_history(
         )
         for p in snapshots_service.net_worth_series(db, hid, days=days)
     ]
+
+
+@router.get("/investments")
+def investments(
+    hid: uuid.UUID = Depends(require_household), db: Session = Depends(get_db)
+) -> dict[str, Any]:
+    return investments_service.summary(db, hid).to_dict()

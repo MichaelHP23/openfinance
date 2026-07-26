@@ -1,3 +1,4 @@
+import logging
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -10,6 +11,8 @@ from app.providers.base import get_credentials
 from app.providers.simplefin import SimpleFinError
 from app.schemas.connection import ConnectionOut, SimpleFinLink, SyncOut
 from app.services import connections
+
+log = logging.getLogger("openfinance.connections")
 
 router = APIRouter(prefix="/connections", tags=["connections"])
 
@@ -49,6 +52,7 @@ def link_simplefin(
         conn = connections.link_simplefin(db, hid, body.setup_token)
         result = connections.sync(db, hid, conn)
     except SimpleFinError as exc:
+        log.warning("simplefin link failed: %s", exc)
         raise HTTPException(status_code=400, detail=str(exc))
     return SyncOut(**result.__dict__, is_demo=_is_demo(conn))
 
@@ -56,14 +60,16 @@ def link_simplefin(
 @router.post("/{connection_id}/sync", response_model=SyncOut)
 def sync_connection(
     connection_id: uuid.UUID,
+    full: bool = False,
     hid: uuid.UUID = Depends(require_household),
     db: Session = Depends(get_db),
 ) -> SyncOut:
+    """`full=true` re-requests a year instead of resuming from the last sync."""
     conn = connections.get(db, hid, connection_id)
     if not conn:
         raise HTTPException(status_code=404, detail="Connection not found")
     try:
-        result = connections.sync(db, hid, conn)
+        result = connections.sync(db, hid, conn, full=full)
     except SimpleFinError as exc:
         raise HTTPException(status_code=502, detail=str(exc))
     return SyncOut(**result.__dict__, is_demo=_is_demo(conn))

@@ -21,3 +21,10 @@ class AccountOut(BaseModel):
     balance: Decimal
     is_manual: bool
     model_config = {"from_attributes": True}
+
+
+class AccountUpdate(BaseModel):
+    name: str | None = None
+    type: str | None = None
+    institution: str | None = None
+    balance: Decimal | None = None

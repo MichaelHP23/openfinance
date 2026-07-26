@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import require_household
 from app.core.db import get_db
 from app.models.account import Account
-from app.schemas.account import AccountCreate, AccountOut
+from app.schemas.account import AccountCreate, AccountOut, AccountUpdate
 from app.services import accounts
 
 router = APIRouter(prefix="/accounts", tags=["accounts"])
@@ -26,6 +26,22 @@ def list_accounts(
     hid: uuid.UUID = Depends(require_household), db: Session = Depends(get_db)
 ) -> list[Account]:
     return accounts.list_for(db, hid)
+
+
+@router.patch("/{account_id}", response_model=AccountOut)
+def update_account(
+    account_id: uuid.UUID,
+    body: AccountUpdate,
+    hid: uuid.UUID = Depends(require_household),
+    db: Session = Depends(get_db),
+) -> Account:
+    try:
+        account = accounts.update(db, hid, account_id, body)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    if account is None:
+        raise HTTPException(status_code=404, detail="Account not found")
+    return account
 
 
 @router.delete("/{account_id}")

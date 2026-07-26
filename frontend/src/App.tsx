@@ -5,6 +5,8 @@ import { apiFetch } from "./api/client";
 import { AuthPage } from "./auth/AuthPage";
 import { OverviewPage } from "./pages/OverviewPage";
 import { AccountsPage } from "./pages/AccountsPage";
+import { AccountDetailPage } from "./pages/AccountDetailPage";
+import { InvestmentsPage } from "./pages/InvestmentsPage";
 import { TransactionsPage } from "./pages/TransactionsPage";
 import { Shell } from "./ui/Shell";
 
@@ -51,6 +53,22 @@ export default function App() {
             element={
               <Protected>
                 <AccountsPage />
+              </Protected>
+            }
+          />
+          <Route
+            path="/accounts/:accountId"
+            element={
+              <Protected>
+                <AccountDetailPage />
+              </Protected>
+            }
+          />
+          <Route
+            path="/investments"
+            element={
+              <Protected>
+                <InvestmentsPage />
               </Protected>
             }
           />

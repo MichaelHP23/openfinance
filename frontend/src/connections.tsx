@@ -129,13 +129,15 @@ export function ConnectionList() {
   });
 
   const sync = useMutation({
-    mutationFn: (id: string) =>
-      apiFetch<SyncResult>(`/connections/${id}/sync`, { method: "POST" }),
-    onSuccess: (r, id) => {
+    mutationFn: ({ id, full }: { id: string; full?: boolean }) =>
+      apiFetch<SyncResult>(`/connections/${id}/sync${full ? "?full=true" : ""}`, {
+        method: "POST",
+      }),
+    onSuccess: (r, { id }) => {
       setNotes((n) => ({ ...n, [id]: summarize(r) }));
       refresh();
     },
-    onError: (e, id) => setNotes((n) => ({ ...n, [id]: (e as Error).message })),
+    onError: (e, { id }) => setNotes((n) => ({ ...n, [id]: (e as Error).message })),
   });
 
   const forget = useMutation({
@@ -168,11 +170,21 @@ export function ConnectionList() {
               </span>
             </span>
             <button
-              onClick={() => sync.mutate(c.id)}
+              onClick={() => sync.mutate({ id: c.id })}
               disabled={sync.isPending}
               className="btn-ghost"
             >
-              {sync.isPending && sync.variables === c.id ? "Syncing…" : "Sync now"}
+              {sync.isPending && sync.variables?.id === c.id && !sync.variables?.full
+                ? "Syncing…"
+                : "Sync now"}
+            </button>
+            <button
+              onClick={() => sync.mutate({ id: c.id, full: true })}
+              disabled={sync.isPending}
+              title="Re-request a year of history instead of resuming from the last sync"
+              className="text-[13px] text-muted transition-colors hover:text-bone"
+            >
+              {sync.isPending && sync.variables?.full ? "Backfilling…" : "Backfill year"}
             </button>
             <button
               onClick={() => forget.mutate(c.id)}

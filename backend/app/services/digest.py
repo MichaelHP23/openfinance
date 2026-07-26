@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 
 from app.models.account import Account
 from app.models.transaction import Transaction
+from app.services import investments as investments_service
 from app.services.snapshots import LIABILITY_TYPES, net_worth_series
 
 
@@ -51,6 +52,7 @@ class Digest:
     recurring_candidates: list[dict[str, Any]] = field(default_factory=list)
     transaction_count: int = 0
     oldest_transaction: str | None = None
+    investments: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -146,5 +148,14 @@ def build(db: Session, household_id: uuid.UUID, months_back: int = 6) -> Digest:
                     "months_seen": len(months_seen),
                 }
             )
+
+    invest = investments_service.summary(db, household_id)
+    digest.investments = {
+        "total_value": invest.total_value,
+        "account_count": invest.account_count,
+        "income_ytd": invest.income_ytd,
+        "contributions_ytd": invest.contributions_ytd,
+        "accounts": invest.accounts,
+    }
 
     return digest

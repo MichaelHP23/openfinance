@@ -149,16 +149,20 @@ def test_new_transactions_arrive_on_a_later_sync(db):
     assert len(txn_service.list_for(db, hid)) == 3
 
 
-def test_sync_passes_the_last_sync_time_as_since(db):
+def test_first_sync_asks_for_a_year_then_only_for_new_activity(db):
     hid = _household(db)
     conn = _conn(db, hid)
     provider = FakeProvider(ACCOUNTS, TXNS)
 
     sync_connection(db, hid, conn, provider)
-    assert provider.since_seen == [None]  # nothing synced yet
+    first = provider.since_seen[0]
+    assert first is not None, "a first sync with no window returns only a few days"
+    age = datetime.now(UTC) - first
+    assert 364 <= age.days <= 366
 
     sync_connection(db, hid, conn, provider)
-    assert provider.since_seen[1] is not None
+    # Afterwards it resumes from the last sync rather than re-pulling the year.
+    assert provider.since_seen[1] > first
 
 
 def test_sync_stamps_last_synced_and_marks_the_connection_active(db):
@@ -305,3 +309,17 @@ def test_a_different_amount_on_the_same_day_is_not_a_duplicate(db):
         db, hid, conn, FakeProvider(ACCOUNTS, [_txn("p-2", 4, "-12.00", "Shop")])
     )
     assert result.transactions_added == 1
+
+
+def test_full_resync_reaches_back_a_year_even_after_syncing(db):
+    """Resuming from the last sync is right for routine runs, but a backfill has to be
+    able to ask for the whole window again."""
+    hid = _household(db)
+    conn = _conn(db, hid)
+    provider = FakeProvider(ACCOUNTS, TXNS)
+
+    sync_connection(db, hid, conn, provider)
+    sync_connection(db, hid, conn, provider, full=True)
+
+    age = datetime.now(UTC) - provider.since_seen[1]
+    assert 364 <= age.days <= 366

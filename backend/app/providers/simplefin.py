@@ -8,6 +8,7 @@ https://www.simplefin.org/protocol.html
 """
 
 import base64
+import logging
 import uuid
 from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
@@ -19,6 +20,32 @@ from app.models.connection import Provider, ProviderConnection
 from app.providers.base import AccountDTO, Credentials, TxnDTO, get_credentials, set_credentials
 
 TIMEOUT = 30.0
+
+log = logging.getLogger("openfinance.simplefin")
+
+
+def _decode_token(setup_token: str) -> str:
+    """Base64-decode a setup token the way a human actually pastes it.
+
+    Bridges wrap the token across lines and copying picks up the newlines, so strict
+    decoding fails on a token that is otherwise perfectly good. Whitespace is stripped
+    everywhere and missing padding is restored.
+    """
+    cleaned = "".join(setup_token.split())
+    if not cleaned:
+        raise SimpleFinError("A setup token is required")
+    if cleaned.startswith("https://"):
+        raise SimpleFinError(
+            "That looks like an access URL, not a setup token. Paste the long "
+            "base64 string the bridge gives you (it starts with 'aHR0cHM6')."
+        )
+    cleaned += "=" * (-len(cleaned) % 4)
+    try:
+        return base64.b64decode(cleaned, validate=True).decode()
+    except Exception as exc:
+        raise SimpleFinError(
+            "Setup token is not valid base64 — copy the whole token, with no extra characters."
+        ) from exc
 
 
 class SimpleFinError(Exception):
@@ -42,9 +69,29 @@ def _currency(raw: object) -> str:
 # ponytail: SimpleFIN carries no account-type field, so this reads the name the bank
 # gave us. Wrong guesses are cosmetic — type only affects the asset/liability split.
 _TYPE_HINTS = (
-    ("credit_card", ("credit card", "creditcard", "card", "visa", "mastercard", "amex")),
+    (
+        "credit_card",
+        (
+            "credit card",
+            "creditcard",
+            "card",
+            "visa",
+            "mastercard",
+            "amex",
+            "discover it",
+            "platinum",
+            "sapphire",
+            "freedom",
+            "quicksilver",
+            "venture",
+            "savor",
+            "blue cash",
+            "gold card",
+            "rewards card",
+        ),
+    ),
     ("savings", ("saving", "money market", "cd ", "certificate")),
-    ("investment", ("invest", "brokerage", "401", "ira", "roth", "retirement")),
+    ("investment", ("invest", "brokerage", "401", "ira", "roth", "retirement", "529")),
     ("loan", ("loan", "mortgage", "student", "auto financing")),
 )
 
@@ -74,26 +121,32 @@ class SimpleFinProvider:
         enough to be confusing, so it is worth naming explicitly.
         """
         try:
-            url = base64.b64decode(setup_token.strip(), validate=True).decode()
-        except Exception:  # noqa: BLE001 - unparseable means "not the demo", claim() reports why
+            url = _decode_token(setup_token)
+        except SimpleFinError:
             return False
         return url.rstrip("/").endswith("/claim/demo")
 
     def claim(self, setup_token: str) -> str:
         """Exchange a one-time setup token for a durable access URL."""
-        try:
-            claim_url = base64.b64decode(setup_token.strip(), validate=True).decode()
-        except Exception as exc:
-            raise SimpleFinError("Setup token is not valid base64") from exc
+        claim_url = _decode_token(setup_token)
 
         if not claim_url.startswith("https://"):
             raise SimpleFinError("Setup token must decode to an https URL")
 
         resp = self._client.post(claim_url)
         if resp.status_code != 200:
+            # Logged because the browser only shows the message, and knowing which
+            # status the bridge returned is the difference between "reused token" and
+            # "bridge is down".
+            log.warning(
+                "claim failed: %s returned %s (%s)",
+                claim_url,
+                resp.status_code,
+                resp.text[:200],
+            )
             raise SimpleFinError(
-                f"Claiming the setup token failed ({resp.status_code}). "
-                "Setup tokens are single-use — generate a fresh one."
+                f"Claiming the setup token failed ({resp.status_code}). Setup tokens are "
+                "single-use — generate a fresh one from the bridge and paste that."
             )
 
         access_url = resp.text.strip()

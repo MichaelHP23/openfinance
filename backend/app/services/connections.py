@@ -48,11 +48,13 @@ def sync(
     household_id: uuid.UUID,
     conn: ProviderConnection,
     provider: SimpleFinProvider | None = None,
+    *,
+    full: bool = False,
 ) -> SyncResult:
     if conn.provider is not Provider.simplefin:
         raise ValueError(f"No sync implemented for {conn.provider.value}")
     try:
-        return sync_connection(db, household_id, conn, provider or SimpleFinProvider())
+        return sync_connection(db, household_id, conn, provider or SimpleFinProvider(), full=full)
     except Exception:
         conn.status = ConnStatus.error
         db.commit()

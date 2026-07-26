@@ -5,6 +5,7 @@ import { apiFetch } from "../api/client";
 const NAV = [
   { to: "/", label: "Overview", end: true },
   { to: "/accounts", label: "Accounts", end: false },
+  { to: "/investments", label: "Investments", end: false },
   { to: "/transactions", label: "Transactions", end: false },
 ];
 

@@ -7,7 +7,7 @@ SimpleFIN, Plaid, or a fake in tests all run the same path.
 import uuid
 from collections import Counter
 from dataclasses import dataclass, field
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 
 from sqlalchemy import select
@@ -17,6 +17,8 @@ from app.models.account import Account, AccountType
 from app.models.connection import ConnStatus, ProviderConnection
 from app.models.transaction import Transaction
 from app.providers.base import BankProvider, TxnDTO
+
+INITIAL_HISTORY_DAYS = 365
 
 
 @dataclass
@@ -40,6 +42,8 @@ def sync_connection(
     household_id: uuid.UUID,
     conn: ProviderConnection,
     provider: BankProvider,
+    *,
+    full: bool = False,
 ) -> SyncResult:
     if conn.household_id != household_id:
         raise ValueError("Connection belongs to another household")
@@ -77,8 +81,11 @@ def sync_connection(
             by_external[account_dto.external_id] = created
             result.accounts_added += 1
 
-    # Re-fetch from the last sync point; the provider decides what "since" means.
-    txns = provider.fetch_transactions(conn, conn.last_synced_at)
+    # First sync pulls a year; without an explicit window SimpleFIN returns only a
+    # handful of recent days, which is not enough to show trends or spot subscriptions.
+    year_ago = datetime.now(UTC) - timedelta(days=INITIAL_HISTORY_DAYS)
+    since = year_ago if full or conn.last_synced_at is None else conn.last_synced_at
+    txns = provider.fetch_transactions(conn, since)
 
     account_ids = [a.id for a in by_external.values()]
     seen: set[tuple[uuid.UUID, str]] = set()

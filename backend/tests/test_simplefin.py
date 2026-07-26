@@ -245,3 +245,29 @@ def test_linking_records_whether_the_token_was_the_demo():
 
     real = provider_with(accounts_handler).link_account(uuid.uuid4(), {"setup_token": SETUP_TOKEN})
     assert get_credentials(real)["demo"] is False
+
+
+def test_a_token_wrapped_across_lines_still_works():
+    """Bridges wrap the token for display and copying takes the newlines with it."""
+    wrapped = "\n".join([SETUP_TOKEN[:20], SETUP_TOKEN[20:40], SETUP_TOKEN[40:]])
+    assert provider_with(accounts_handler).claim(wrapped) == ACCESS_URL
+
+
+def test_a_token_with_stray_spaces_still_works():
+    spaced = f"  {SETUP_TOKEN[:10]} {SETUP_TOKEN[10:]}  "
+    assert provider_with(accounts_handler).claim(spaced) == ACCESS_URL
+
+
+def test_missing_base64_padding_is_restored():
+    unpadded = SETUP_TOKEN.rstrip("=")
+    assert provider_with(accounts_handler).claim(unpadded) == ACCESS_URL
+
+
+def test_pasting_an_access_url_instead_of_a_token_says_so():
+    with pytest.raises(SimpleFinError, match="access URL, not a setup token"):
+        provider_with(accounts_handler).claim(ACCESS_URL)
+
+
+def test_an_empty_token_is_reported_as_missing():
+    with pytest.raises(SimpleFinError, match="required"):
+        provider_with(accounts_handler).claim("   ")

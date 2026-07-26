@@ -78,3 +78,59 @@ def test_delete_missing_account_reports_false(db):
     import uuid as _uuid
 
     assert accounts.delete(db, _uuid.uuid4(), _uuid.uuid4()) is False
+
+
+def test_update_corrects_a_miscategorised_account(db):
+    """A card named "Quicksilver" imports as checking, so its balance counts as an
+    asset. Being able to fix the type is what makes net worth right."""
+    from app.schemas.account import AccountUpdate
+
+    hid = _real_household(db)
+    acct = accounts.create(
+        db, hid, AccountCreate(type="checking", name="Quicksilver", balance=Decimal("-5256.79"))
+    )
+
+    updated = accounts.update(db, hid, acct.id, AccountUpdate(type="credit_card"))
+
+    assert updated is not None
+    assert updated.type.value == "credit_card"
+    assert updated.name == "Quicksilver"  # untouched fields stay put
+
+
+def test_update_changes_only_what_was_sent(db):
+    from app.schemas.account import AccountUpdate
+
+    hid = _real_household(db)
+    acct = accounts.create(
+        db,
+        hid,
+        AccountCreate(type="savings", name="Old", institution="Bank", balance=Decimal(10)),
+    )
+
+    accounts.update(db, hid, acct.id, AccountUpdate(name="New"))
+
+    refreshed = accounts.get(db, hid, acct.id)
+    assert refreshed.name == "New"
+    assert refreshed.institution == "Bank"
+    assert refreshed.balance == Decimal("10.0000")
+    assert refreshed.type.value == "savings"
+
+
+def test_update_rejects_an_unknown_type(db):
+    import pytest
+
+    from app.schemas.account import AccountUpdate
+
+    hid = _real_household(db)
+    acct = accounts.create(db, hid, AccountCreate(type="checking", name="X"))
+    with pytest.raises(ValueError, match="Unknown account type"):
+        accounts.update(db, hid, acct.id, AccountUpdate(type="not-a-type"))
+
+
+def test_update_refuses_another_households_account(db):
+    import uuid as _uuid
+
+    from app.schemas.account import AccountUpdate
+
+    acct = accounts.create(db, _real_household(db), AccountCreate(type="checking", name="Mine"))
+    assert accounts.update(db, _uuid.uuid4(), acct.id, AccountUpdate(name="Yours")) is None

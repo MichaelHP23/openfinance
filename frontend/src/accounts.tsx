@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "./api/client";
@@ -41,7 +42,9 @@ export function AccountList() {
             {initials(a.name)}
           </span>
           <span className="min-w-0 flex-1">
-            <span className="block truncate text-sm">{a.name}</span>
+            <Link to={`/accounts/${a.id}`} className="block truncate text-sm hover:text-acid">
+              {a.name}
+            </Link>
             <span className="label">
               {prettyType(a.type)}
               {a.institution ? ` · ${a.institution}` : ""}
