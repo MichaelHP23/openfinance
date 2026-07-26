@@ -8,9 +8,11 @@ export type Connection = {
   provider: string;
   status: string;
   last_synced_at: string | null;
+  is_demo: boolean;
 };
 
 type SyncResult = {
+  is_demo: boolean;
   accounts_added: number;
   accounts_updated: number;
   transactions_added: number;
@@ -53,7 +55,11 @@ export function ConnectBank() {
         body: JSON.stringify(body),
       }),
     onSuccess: (r) => {
-      setResult(summarize(r));
+      setResult(
+        r.is_demo
+          ? `Connected SimpleFIN's DEMO bank — this is invented data, not your accounts. ${summarize(r)}`
+          : summarize(r),
+      );
       reset();
       refresh();
     },
@@ -99,7 +105,17 @@ export function ConnectBank() {
           {(link.error as Error).message}
         </p>
       )}
-      {result && !link.isError && <p className="mt-3 text-sm text-acid">{result}</p>}
+      {result && !link.isError && (
+        <p
+          className={`mt-3 rounded-lg px-3 py-2 text-sm ${
+            result.includes("DEMO")
+              ? "border border-clay/40 bg-clay/10 text-clay"
+              : "text-acid"
+          }`}
+        >
+          {result}
+        </p>
+      )}
     </div>
   );
 }
@@ -136,8 +152,16 @@ export function ConnectionList() {
         {data.map((c) => (
           <li key={c.id} className="flex flex-wrap items-center gap-3 py-3 first:pt-0 last:pb-0">
             <span className="min-w-0 flex-1">
-              <span className="block text-sm capitalize">{c.provider}</span>
+              <span className="block text-sm capitalize">
+                {c.provider}
+                {c.is_demo && (
+                  <span className="ml-2 rounded-full border border-clay/50 px-2 py-0.5 text-[10px] tracking-widest text-clay uppercase">
+                    demo
+                  </span>
+                )}
+              </span>
               <span className="label">
+                {c.is_demo ? "DEMO DATA · " : ""}
                 {syncedAt(c.last_synced_at)}
                 {c.status !== "active" && ` · ${c.status}`}
                 {notes[c.id] && ` · ${notes[c.id]}`}

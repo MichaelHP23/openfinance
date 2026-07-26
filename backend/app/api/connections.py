@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import require_household
 from app.core.db import get_db
 from app.models.connection import ProviderConnection
+from app.providers.base import get_credentials
 from app.providers.simplefin import SimpleFinError
 from app.schemas.connection import ConnectionOut, SimpleFinLink, SyncOut
 from app.services import connections
@@ -19,7 +20,15 @@ def _out(conn: ProviderConnection) -> ConnectionOut:
         provider=conn.provider.value,
         status=conn.status.value,
         last_synced_at=conn.last_synced_at,
+        is_demo=_is_demo(conn),
     )
+
+
+def _is_demo(conn: ProviderConnection) -> bool:
+    try:
+        return bool(get_credentials(conn).get("demo"))
+    except Exception:  # noqa: BLE001 - a label must never break listing connections
+        return False
 
 
 @router.get("", response_model=list[ConnectionOut])
@@ -41,7 +50,7 @@ def link_simplefin(
         result = connections.sync(db, hid, conn)
     except SimpleFinError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
-    return SyncOut(**result.__dict__)
+    return SyncOut(**result.__dict__, is_demo=_is_demo(conn))
 
 
 @router.post("/{connection_id}/sync", response_model=SyncOut)
@@ -57,7 +66,7 @@ def sync_connection(
         result = connections.sync(db, hid, conn)
     except SimpleFinError as exc:
         raise HTTPException(status_code=502, detail=str(exc))
-    return SyncOut(**result.__dict__)
+    return SyncOut(**result.__dict__, is_demo=_is_demo(conn))
 
 
 @router.delete("/{connection_id}")

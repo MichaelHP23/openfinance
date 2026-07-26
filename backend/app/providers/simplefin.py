@@ -66,6 +66,19 @@ class SimpleFinProvider:
 
     # --- linking -------------------------------------------------------------
 
+    @staticmethod
+    def is_demo_token(setup_token: str) -> bool:
+        """SimpleFIN's published demo token returns invented accounts, not a real bank.
+
+        Easy to grab by mistake from the docs, and the resulting data looks plausible
+        enough to be confusing, so it is worth naming explicitly.
+        """
+        try:
+            url = base64.b64decode(setup_token.strip(), validate=True).decode()
+        except Exception:  # noqa: BLE001 - unparseable means "not the demo", claim() reports why
+            return False
+        return url.rstrip("/").endswith("/claim/demo")
+
     def claim(self, setup_token: str) -> str:
         """Exchange a one-time setup token for a durable access URL."""
         try:
@@ -94,7 +107,7 @@ class SimpleFinProvider:
             raise SimpleFinError("A setup token is required")
 
         conn = ProviderConnection(household_id=household_id, provider=Provider.simplefin)
-        set_credentials(conn, {"access_url": self.claim(token)})
+        set_credentials(conn, {"access_url": self.claim(token), "demo": self.is_demo_token(token)})
         return conn
 
     # --- fetching ------------------------------------------------------------

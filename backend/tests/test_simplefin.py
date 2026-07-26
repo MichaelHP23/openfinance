@@ -81,7 +81,7 @@ def test_claim_reports_a_reused_token():
 def test_link_account_stores_the_access_url_encrypted():
     conn = provider_with(accounts_handler).link_account(uuid.uuid4(), {"setup_token": SETUP_TOKEN})
     assert ACCESS_URL.encode() not in conn.encrypted_credentials
-    assert get_credentials(conn) == {"access_url": ACCESS_URL}
+    assert get_credentials(conn) == {"access_url": ACCESS_URL, "demo": False}
 
 
 def test_link_account_requires_a_token():
@@ -223,3 +223,25 @@ def test_non_iso_currency_falls_back_to_usd():
 )
 def test_account_type_guessing(name, expected):
     assert guess_account_type(name) == expected
+
+
+def test_the_published_demo_token_is_recognised():
+    demo = base64.b64encode(b"https://bridge.simplefin.org/simplefin/claim/demo").decode()
+    assert SimpleFinProvider.is_demo_token(demo) is True
+
+
+def test_a_real_token_is_not_flagged_as_demo():
+    assert SimpleFinProvider.is_demo_token(SETUP_TOKEN) is False
+
+
+def test_garbage_is_not_flagged_as_demo():
+    assert SimpleFinProvider.is_demo_token("not-base64!!") is False
+
+
+def test_linking_records_whether_the_token_was_the_demo():
+    demo = base64.b64encode(b"https://bridge.simplefin.org/simplefin/claim/demo").decode()
+    conn = provider_with(accounts_handler).link_account(uuid.uuid4(), {"setup_token": demo})
+    assert get_credentials(conn)["demo"] is True
+
+    real = provider_with(accounts_handler).link_account(uuid.uuid4(), {"setup_token": SETUP_TOKEN})
+    assert get_credentials(real)["demo"] is False
