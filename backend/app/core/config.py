@@ -1,12 +1,16 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+# Published in the repo, so it protects nothing. Real installs must override it —
+# it derives the KEK that encrypts provider credentials (bank access tokens).
+DEFAULT_SECRET_KEY = "dev-only-insecure-change-me-32-bytes!!"
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     database_url: str = "postgresql+psycopg://openfinance:openfinance@localhost:5432/openfinance"
     redis_url: str = "redis://localhost:6379/0"
-    app_secret_key: str = "dev-only-insecure-change-me-32-bytes!!"
+    app_secret_key: str = DEFAULT_SECRET_KEY
     environment: str = "development"
     # Comma-separated exact origins. Credentialed CORS forbids "*", so this is never a
     # wildcard. 5174 is what Vite falls back to when 5173 is already taken (e.g. the

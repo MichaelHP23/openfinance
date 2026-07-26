@@ -3,9 +3,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
-from app.api import accounts, auth, imports, transactions
+from app.api import accounts, auth, connections, imports, transactions
 from app.api.deps import limiter
-from app.core.config import settings
+from app.core.config import DEFAULT_SECRET_KEY, settings
+
+if settings.app_secret_key == DEFAULT_SECRET_KEY and settings.environment != "development":
+    # This key derives the KEK for provider credentials. The default is published in
+    # the repo, so anything encrypted under it is effectively plaintext.
+    raise RuntimeError("APP_SECRET_KEY is still the published default — set a real one")
 
 if settings.local_mode and settings.environment != "development":
     # LOCAL_MODE disables authentication outright. Refuse to start in any config that
@@ -32,6 +37,7 @@ app.include_router(auth.router)
 app.include_router(accounts.router)
 app.include_router(transactions.router)
 app.include_router(imports.router)
+app.include_router(connections.router)
 
 
 @app.get("/health")

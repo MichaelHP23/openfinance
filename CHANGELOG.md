@@ -3,6 +3,10 @@
 ## [Unreleased] — M0 Foundation
 
 ### Added
+- SimpleFIN Bridge provider: claim a setup token, encrypt the access URL, sync accounts
+  and transactions with dedup on provider transaction ids. Connect / Sync now / Forget
+  in the UI.
+- `APP_SECRET_KEY` startup guard — the published default is refused outside development.
 - `LOCAL_MODE` single-user desktop mode — no login, one household, guarded to
   `ENVIRONMENT=development`. Compose enables it by default.
 - Designed UI: sidebar shell, overview with net worth / cash flow / top merchants,

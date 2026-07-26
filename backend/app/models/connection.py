@@ -12,6 +12,7 @@ from app.models.base import Base, TimestampMixin, UUIDMixin
 class Provider(str, enum.Enum):
     manual = "manual"
     plaid = "plaid"
+    simplefin = "simplefin"
 
 
 class ConnStatus(str, enum.Enum):

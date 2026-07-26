@@ -35,3 +35,5 @@ class Account(Base, UUIDMixin, TimestampMixin):
     currency: Mapped[str] = mapped_column(String(3), default="USD")
     balance: Mapped[Decimal] = mapped_column(Numeric(19, 4), default=Decimal(0))
     is_manual: Mapped[bool] = mapped_column(Boolean, default=True)
+    # The provider's own id for this account — how a sync matches rows it already created.
+    external_id: Mapped[str | None] = mapped_column(nullable=True, index=True)

@@ -70,11 +70,28 @@ npm run lint
 - `BankProvider` protocol with a `ManualProvider`; credentials sealed with AES-GCM
   envelope encryption bound to the household + provider context.
 
+## Connecting a bank
+
+Bank syncing goes through [SimpleFIN Bridge](https://beta-bridge.simplefin.org/) — a
+read-only aggregation protocol that costs about $15/year and needs no application or
+business review, unlike Plaid.
+
+1. Link your banks at SimpleFIN Bridge and copy the **setup token** it gives you.
+2. Paste it into **Accounts → Connect a bank**.
+
+The token is single-use: the app exchanges it for a durable access URL, encrypts that
+with AES-256-GCM, and stores only the ciphertext. Hit **Sync now** to pull new
+transactions; re-syncing is deduped on the provider's own transaction ids, so nothing
+doubles up.
+
+Plaid slots into the same `BankProvider` protocol if SimpleFIN doesn't cover your bank.
+
 ## Not here yet
 
-- **Bank syncing.** Needs Plaid API keys — that's the next milestone. Until then,
-  import your bank's CSV export.
-- Budgets, categorization rules, investments, reports. See the roadmap in the design spec.
+- Budgets, categorization rules, investments holdings, reports. See the roadmap in the
+  design spec.
+- Scheduled background syncing — for now, syncing is a button.
+- Editing or deleting an account from the UI.
 
 ## Don't run `npm audit fix --force`
 

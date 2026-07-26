@@ -43,7 +43,15 @@ CSRF: SameSite=Lax is the M0 mitigation; double-submit tokens are deferred to M1
 
 `BankProvider` is a `Protocol` — `link_account`, `fetch_accounts`, `fetch_transactions`
 over `AccountDTO` / `TxnDTO`. Providers return DTOs, never ORM objects, so a new
-integration can't leak its shape into the domain. `ManualProvider` is the M0 implementation.
+integration can't leak its shape into the domain. `ManualProvider` and `SimpleFinProvider`
+both implement it; Plaid would too, without touching a service.
+
+`services/sync.py` is provider-agnostic: it takes anything satisfying the protocol,
+matches provider accounts to local rows on `accounts.external_id`, and skips transactions
+whose `(account_id, external_id)` it already holds. Tests drive it with a `FakeProvider`,
+so sync logic is verified without a network. `SimpleFinProvider` itself is tested against
+`httpx.MockTransport`, covering claim failures, reused tokens, partial institution
+outages, non-JSON bodies, and non-numeric balances.
 
 Credentials use envelope encryption: a random 32-byte DEK per blob, wrapped by a KEK
 derived from `APP_SECRET_KEY`, both AES-256-GCM. The AAD binds ciphertext to

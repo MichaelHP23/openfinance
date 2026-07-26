@@ -95,20 +95,3 @@ export function NewAccountForm() {
     </form>
   );
 }
-
-export function ConnectBank() {
-  return (
-    <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-dashed border-line px-5 py-4">
-      <div>
-        <p className="text-sm">
-          Connect a bank <span className="ml-1 text-muted">— not built yet</span>
-        </p>
-        <p className="mt-1 max-w-lg text-[13px] leading-relaxed text-muted">
-          Automatic syncing needs a Plaid account and API keys. Until that lands, add accounts by
-          hand and import transactions from your bank's CSV export.
-        </p>
-      </div>
-      <span className="label shrink-0 rounded-full border border-line px-3 py-1.5">Milestone 2</span>
-    </div>
-  );
-}
