@@ -86,6 +86,26 @@ doubles up.
 
 Plaid slots into the same `BankProvider` protocol if SimpleFIN doesn't cover your bank.
 
+## Reaching it from your phone
+
+The app has **no login** in local mode, so it must never be port-forwarded or given a
+public hostname — anyone who found it would have full access to your finances.
+
+Use a private network instead. [Tailscale](https://tailscale.com/) is the easy one:
+install it on this machine and on your phone, sign both into the same account, then
+open `http://<machine-name>:5173` from the phone anywhere in the world. Nothing is
+exposed publicly and no ports are opened.
+
+On your own wifi, the LAN address works with no extra software: `http://<lan-ip>:5173`.
+
+The client derives the API host from whatever address you loaded the page on, so no
+configuration changes between localhost, LAN and tailnet. In development the API
+accepts origins from loopback, RFC1918 LAN ranges and Tailscale (100.64/10, `*.ts.net`)
+— public origins still have to be listed explicitly in `CORS_ORIGINS`.
+
+Your machine has to be awake with `docker compose up -d` running for any of this to
+answer.
+
 ## AI assistant
 
 Optional and off by default. Put an `ANTHROPIC_API_KEY` in `backend/.env` and a

@@ -32,9 +32,8 @@ services:
     command: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"
   web:
     build: ./frontend
-    environment:
-      # Browser-side URL, so it's the host mapping — not the compose service name.
-      VITE_API_URL: http://localhost:8000
+    # No VITE_API_URL: the client derives the API host from whatever address the page
+    # was opened on, so localhost, a LAN IP and a Tailscale name all work unchanged.
     depends_on: [api]
     ports: ["5173:5173"]
     # Live source, so editing a file reloads the browser instead of needing a rebuild.

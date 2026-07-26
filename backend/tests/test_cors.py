@@ -34,3 +34,29 @@ def test_regex_does_not_match_lookalike_hosts():
     assert not pattern.match("http://localhost.evil.com")
     assert not pattern.match("http://notlocalhost:5173")
     assert not pattern.match("https://localhost:5173.evil.com")
+
+
+def test_private_network_origins_are_allowed_in_development():
+    """A phone on the tailnet or the LAN loads the page from a private address, so
+    that origin has to pass — without opening the door to public hosts."""
+    for origin in [
+        "http://192.168.1.42:5173",
+        "http://10.0.0.7:5173",
+        "http://172.16.5.9:5173",
+        "http://100.101.102.103:5173",
+        "http://desktop.tail1234.ts.net:5173",
+    ]:
+        resp = _preflight(origin)
+        assert resp.status_code == 200, origin
+        assert resp.headers["access-control-allow-origin"] == origin
+
+
+def test_public_and_lookalike_origins_are_still_refused():
+    for origin in [
+        "http://evil.example.com",
+        "http://localhost.evil.com",
+        "http://100.200.1.1:5173",  # outside Tailscale's 100.64/10 range
+        "http://11.0.0.1:5173",  # not RFC1918
+        "http://ts.net.evil.com",
+    ]:
+        assert _preflight(origin).status_code == 400, origin

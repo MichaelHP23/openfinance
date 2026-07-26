@@ -20,8 +20,22 @@ if settings.local_mode and settings.environment != "development":
 
 # Vite hops to the next free port whenever one is taken, so a dev frontend can land on
 # any of 5173/5174/5175/… Listing them one by one is whack-a-mole; in development, trust
-# loopback on any port. Anything else stays on the exact allowlist.
-LOOPBACK_ORIGIN_RE = r"^http://(localhost|127\.0\.0\.1)(:\d+)?$"
+# private addresses on any port: loopback, RFC1918 LAN, and Tailscale (100.64/10 and
+# *.ts.net) so a phone on the tailnet works. Anything routable from the public internet
+# still has to be on the exact allowlist.
+#
+# This is not the security boundary — CORS restrains browsers, not attackers. Whatever
+# can reach this port can call it, which is why LOCAL_MODE must stay on a private network.
+LOOPBACK_ORIGIN_RE = (
+    r"^http://("
+    r"localhost|127\.0\.0\.1"
+    r"|10\.\d{1,3}\.\d{1,3}\.\d{1,3}"
+    r"|192\.168\.\d{1,3}\.\d{1,3}"
+    r"|172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}"
+    r"|100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.\d{1,3}\.\d{1,3}"
+    r"|[a-z0-9-]+\.[a-z0-9-]+\.ts\.net"
+    r")(:\d+)?$"
+)
 
 app = FastAPI(title="OpenFinance API", lifespan=lifespan)
 app.add_middleware(
