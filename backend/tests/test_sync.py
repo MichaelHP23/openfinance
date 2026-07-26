@@ -203,3 +203,105 @@ def test_synced_rows_are_invisible_to_other_households(db):
 
     assert accounts_service.list_for(db, other) == []
     assert txn_service.list_for(db, other) == []
+
+
+def _txn(ext: str, day: int, amount: str, merchant: str, account: str = "a1") -> TxnDTO:
+    return TxnDTO(
+        external_id=ext,
+        account_external_id=account,
+        posted_at=datetime(2026, 5, day, tzinfo=UTC),
+        amount=Decimal(amount),
+        currency="USD",
+        merchant_raw=merchant,
+    )
+
+
+def test_reissued_ids_do_not_multiply_rows(db):
+    """SimpleFIN's demo re-ids every transaction per call, and real providers re-id a
+    pending charge when it posts. Neither should duplicate what we already hold."""
+    hid = _household(db)
+    conn = _conn(db, hid)
+
+    sync_connection(
+        db, hid, conn, FakeProvider(ACCOUNTS, [_txn("id-1", 1, "-6.65", "Grocery store")])
+    )
+    result = sync_connection(
+        db, hid, conn, FakeProvider(ACCOUNTS, [_txn("id-999", 1, "-6.65", "Grocery store")])
+    )
+
+    assert result.transactions_added == 0
+    assert result.transactions_skipped == 1
+    assert len(txn_service.list_for(db, hid)) == 1
+
+
+def test_two_genuinely_identical_purchases_are_both_kept(db):
+    """Buying the same coffee twice in a day is real; the provider reports two, so we
+    keep two rather than collapsing them."""
+    hid = _household(db)
+    conn = _conn(db, hid)
+
+    both = [_txn("c-1", 2, "-5.50", "Coffee"), _txn("c-2", 2, "-5.50", "Coffee")]
+    result = sync_connection(db, hid, conn, FakeProvider(ACCOUNTS, both))
+
+    assert result.transactions_added == 2
+    assert len(txn_service.list_for(db, hid)) == 2
+
+
+def test_a_third_identical_purchase_later_still_registers(db):
+    hid = _household(db)
+    conn = _conn(db, hid)
+    sync_connection(
+        db,
+        hid,
+        conn,
+        FakeProvider(
+            ACCOUNTS, [_txn("c-1", 2, "-5.50", "Coffee"), _txn("c-2", 2, "-5.50", "Coffee")]
+        ),
+    )
+
+    again = [
+        _txn("x-1", 2, "-5.50", "Coffee"),
+        _txn("x-2", 2, "-5.50", "Coffee"),
+        _txn("x-3", 2, "-5.50", "Coffee"),
+    ]
+    result = sync_connection(db, hid, conn, FakeProvider(ACCOUNTS, again))
+
+    assert result.transactions_added == 1
+    assert result.transactions_skipped == 2
+    assert len(txn_service.list_for(db, hid)) == 3
+
+
+def test_repeated_syncs_are_stable(db):
+    """The bug this replaced turned 6 transactions into 18 across three syncs."""
+    hid = _household(db)
+    conn = _conn(db, hid)
+    batch = [
+        _txn("a", 1, "-6.65", "Grocery store"),
+        _txn("b", 1, "-5.50", "Grocery store"),
+        _txn("c", 3, "-176.67", "John's Fishin Shack"),
+    ]
+    for run in range(3):
+        reissued = [
+            TxnDTO(
+                external_id=f"{t.external_id}-{run}",
+                account_external_id=t.account_external_id,
+                posted_at=t.posted_at,
+                amount=t.amount,
+                currency=t.currency,
+                merchant_raw=t.merchant_raw,
+            )
+            for t in batch
+        ]
+        sync_connection(db, hid, conn, FakeProvider(ACCOUNTS, reissued))
+
+    assert len(txn_service.list_for(db, hid)) == 3
+
+
+def test_a_different_amount_on_the_same_day_is_not_a_duplicate(db):
+    hid = _household(db)
+    conn = _conn(db, hid)
+    sync_connection(db, hid, conn, FakeProvider(ACCOUNTS, [_txn("p-1", 4, "-10.00", "Shop")]))
+    result = sync_connection(
+        db, hid, conn, FakeProvider(ACCOUNTS, [_txn("p-2", 4, "-12.00", "Shop")])
+    )
+    assert result.transactions_added == 1

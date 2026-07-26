@@ -1,6 +1,6 @@
 import uuid
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.api.deps import require_household
@@ -26,3 +26,14 @@ def list_accounts(
     hid: uuid.UUID = Depends(require_household), db: Session = Depends(get_db)
 ) -> list[Account]:
     return accounts.list_for(db, hid)
+
+
+@router.delete("/{account_id}")
+def delete_account(
+    account_id: uuid.UUID,
+    hid: uuid.UUID = Depends(require_household),
+    db: Session = Depends(get_db),
+) -> dict[str, str]:
+    if not accounts.delete(db, hid, account_id):
+        raise HTTPException(status_code=404, detail="Account not found")
+    return {"status": "ok"}

@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "./api/client";
@@ -14,7 +15,17 @@ const initials = (name: string) =>
     .toUpperCase();
 
 export function AccountList() {
+  const qc = useQueryClient();
+  const [confirming, setConfirming] = useState<string | null>(null);
   const { data = [], isLoading } = useAccounts();
+  const remove = useMutation({
+    mutationFn: (id: string) => apiFetch(`/accounts/${id}`, { method: "DELETE" }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["accounts"] });
+      qc.invalidateQueries({ queryKey: ["transactions"] });
+      qc.invalidateQueries({ queryKey: ["net-worth"] });
+    },
+  });
   if (isLoading) return <Empty>Loading accounts…</Empty>;
   if (data.length === 0) return <Empty>No accounts yet — add your first one above.</Empty>;
 
@@ -41,6 +52,24 @@ export function AccountList() {
           >
             {LIABILITY_TYPES.has(a.type) ? `−${usd(Math.abs(Number(a.balance)))}` : usd(a.balance)}
           </span>
+          <button
+            onClick={() => setConfirming(confirming === a.id ? null : a.id)}
+            aria-label={`Remove ${a.name}`}
+            className="text-[13px] text-muted transition-colors hover:text-clay"
+          >
+            {confirming === a.id ? "Cancel" : "Remove"}
+          </button>
+          {confirming === a.id && (
+            <button
+              onClick={() => {
+                remove.mutate(a.id);
+                setConfirming(null);
+              }}
+              className="text-[13px] text-clay underline underline-offset-2"
+            >
+              Delete account and its transactions
+            </button>
+          )}
         </li>
       ))}
     </ul>

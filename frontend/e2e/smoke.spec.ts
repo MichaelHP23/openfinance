@@ -36,5 +36,11 @@ test("add account → add transaction → import CSV → see it on the overview"
   await expect(page.getByRole("cell", { name: imported })).toHaveCount(0);
 
   await page.goto("/");
-  await expect(page.getByText("Net worth")).toBeVisible();
+  await expect(page.getByText("Net worth", { exact: true })).toBeVisible();
+
+  // Clean up after ourselves — this runs against the real local database.
+  await page.goto("/accounts");
+  await page.getByRole("button", { name: `Remove ${account}` }).click();
+  await page.getByRole("button", { name: "Delete account and its transactions" }).click();
+  await expect(page.getByText(`${account} (checking)`)).toHaveCount(0);
 });

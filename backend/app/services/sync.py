@@ -5,8 +5,10 @@ SimpleFIN, Plaid, or a fake in tests all run the same path.
 """
 
 import uuid
+from collections import Counter
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
+from decimal import Decimal
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -14,7 +16,7 @@ from sqlalchemy.orm import Session
 from app.models.account import Account, AccountType
 from app.models.connection import ConnStatus, ProviderConnection
 from app.models.transaction import Transaction
-from app.providers.base import BankProvider
+from app.providers.base import BankProvider, TxnDTO
 
 
 @dataclass
@@ -80,25 +82,51 @@ def sync_connection(
 
     account_ids = [a.id for a in by_external.values()]
     seen: set[tuple[uuid.UUID, str]] = set()
+    # Second line of defence: how many rows we already hold per identical-looking
+    # transaction. Providers do re-issue ids — a pending charge gets a new one when it
+    # posts, and SimpleFIN's demo re-ids everything on every call — so matching on
+    # external_id alone silently multiplies rows on each sync. Counting means two genuinely
+    # identical purchases still both survive: the provider reports two, so we keep two.
+    held: Counter[tuple[uuid.UUID, date, Decimal, str]] = Counter()
     if account_ids:
-        seen = {
-            (account_id, external_id)
-            for account_id, external_id in db.execute(
-                select(Transaction.account_id, Transaction.external_id).where(
-                    Transaction.account_id.in_(account_ids),
-                    Transaction.external_id.is_not(None),
-                )
-            )
-        }
+        for account_id, external_id, posted_at, amount, merchant in db.execute(
+            select(
+                Transaction.account_id,
+                Transaction.external_id,
+                Transaction.posted_at,
+                Transaction.amount,
+                Transaction.merchant_raw,
+            ).where(Transaction.account_id.in_(account_ids))
+        ):
+            if external_id is not None:
+                seen.add((account_id, external_id))
+            held[(account_id, posted_at.date(), amount, merchant)] += 1
 
+    def _shape(account_id: uuid.UUID, dto: TxnDTO) -> tuple[uuid.UUID, date, Decimal, str]:
+        return (account_id, dto.posted_at.date(), dto.amount, dto.merchant_raw)
+
+    # Rows we can match by id are accounted for first, so they don't also consume a
+    # count slot and let a genuine new transaction through as a "duplicate".
+    resolved: list[TxnDTO] = []
     for txn_dto in txns:
         target = by_external.get(txn_dto.account_external_id)
         if target is None:
             # A transaction for an account the provider didn't list — nothing to hang it on.
             result.errors.append(f"Unknown account {txn_dto.account_external_id}")
             continue
-        key = (target.id, txn_dto.external_id)
-        if key in seen:
+        if (target.id, txn_dto.external_id) in seen:
+            result.transactions_skipped += 1
+            held[_shape(target.id, txn_dto)] -= 1
+            continue
+        resolved.append(txn_dto)
+
+    for txn_dto in resolved:
+        target = by_external[txn_dto.account_external_id]
+        shape = _shape(target.id, txn_dto)
+        if held[shape] > 0:
+            # Same account, day, amount and merchant as a row we already hold, under a
+            # different id — treat it as the one we have rather than a second charge.
+            held[shape] -= 1
             result.transactions_skipped += 1
             continue
         db.add(
@@ -112,7 +140,7 @@ def sync_connection(
                 external_id=txn_dto.external_id,
             )
         )
-        seen.add(key)
+        seen.add((target.id, txn_dto.external_id))
         result.transactions_added += 1
 
     conn.last_synced_at = datetime.now(UTC)

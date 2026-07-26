@@ -23,7 +23,9 @@ class ClaudeProvider:
     name = "claude"
 
     def __init__(self, api_key: str | None = None, model: str | None = None) -> None:
-        self.api_key = api_key or settings.anthropic_api_key
+        # `or` would let an explicit "" silently pick up the ambient key, so an
+        # intentionally unconfigured provider could not be constructed.
+        self.api_key = settings.anthropic_api_key if api_key is None else api_key
         self.model = model or settings.llm_model
 
     @property
