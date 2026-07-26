@@ -3,10 +3,10 @@ import { NavLink } from "react-router-dom";
 import { apiFetch } from "../api/client";
 
 const NAV = [
-  { to: "/", label: "Overview", end: true },
-  { to: "/accounts", label: "Accounts", end: false },
-  { to: "/investments", label: "Investments", end: false },
-  { to: "/transactions", label: "Transactions", end: false },
+  { to: "/", label: "Overview", short: "Overview", end: true, glyph: "◔" },
+  { to: "/accounts", label: "Accounts", short: "Accounts", end: false, glyph: "▤" },
+  { to: "/investments", label: "Investments", short: "Invest", end: false, glyph: "◈" },
+  { to: "/transactions", label: "Transactions", short: "Activity", end: false, glyph: "⇅" },
 ];
 
 export function Shell({ children, localMode }: { children: ReactNode; localMode: boolean }) {
@@ -66,9 +66,46 @@ export function Shell({ children, localMode }: { children: ReactNode; localMode:
         </div>
       </aside>
 
-      <main className="min-w-0 flex-1 px-5 py-8 md:px-10 md:py-12">
-        <div className="mx-auto w-full max-w-5xl">{children}</div>
-      </main>
+      <div className="flex min-w-0 flex-1 flex-col">
+        {/* The sidebar is desktop-only, so small screens get their own header… */}
+        <header className="flex items-baseline gap-2 border-b border-line px-5 py-4 md:hidden">
+          <span className="font-display text-2xl leading-none text-acid">O</span>
+          <span className="text-xs font-medium tracking-[0.2em] uppercase">Finance</span>
+        </header>
+
+        <main className="min-w-0 flex-1 px-5 py-6 pb-28 md:px-10 md:py-12 md:pb-12">
+          <div className="mx-auto w-full max-w-5xl">{children}</div>
+        </main>
+      </div>
+
+      {/* …and a thumb-reachable tab bar, clearing the iPhone home indicator. */}
+      <nav
+        className="fixed inset-x-0 bottom-0 z-20 flex border-t border-line bg-ink/95 backdrop-blur md:hidden"
+        style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+      >
+        {NAV.map((n) => (
+          <NavLink
+            key={n.to}
+            to={n.to}
+            end={n.end}
+            className={({ isActive }) =>
+              [
+                "flex flex-1 flex-col items-center gap-1 py-2.5 text-[11px] transition-colors",
+                isActive ? "text-acid" : "text-muted",
+              ].join(" ")
+            }
+          >
+            {({ isActive }) => (
+              <>
+                <span aria-hidden className="text-base leading-none">
+                  {n.glyph}
+                </span>
+                <span className={isActive ? "font-medium" : ""}>{n.short}</span>
+              </>
+            )}
+          </NavLink>
+        ))}
+      </nav>
     </div>
   );
 }
