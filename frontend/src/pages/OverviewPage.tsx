@@ -1,7 +1,8 @@
 import { Link } from "react-router-dom";
-import { useAccounts, useTransactions } from "../data";
+import { useAccounts, useNetWorthHistory, useTransactions } from "../data";
 import { TxnRows } from "../transactions";
 import { monthlySeries, monthTotals, netWorth, topMerchants, usd, usdCompact } from "../money";
+import { Assistant, NetWorthChart } from "../insights";
 import { Card, Empty, PageHead } from "../ui/Shell";
 
 const NOW = new Date();
@@ -19,6 +20,7 @@ function Stat({ label, value, tone = "" }: { label: string; value: string; tone?
 export function OverviewPage() {
   const { data: accounts = [] } = useAccounts();
   const { data: txns = [] } = useTransactions();
+  const { data: history = [] } = useNetWorthHistory(90);
 
   const { assets, debts, net } = netWorth(accounts);
   const month = monthTotals(txns, THIS_MONTH);
@@ -59,6 +61,14 @@ export function OverviewPage() {
         />
         <Stat label="Accounts" value={String(accounts.length)} />
       </div>
+
+      <Card className="mb-4" delay={100}>
+        <div className="mb-4 flex items-baseline justify-between">
+          <h2 className="text-sm font-medium">Net worth over time</h2>
+          <span className="label">Last 90 days</span>
+        </div>
+        <NetWorthChart points={history} />
+      </Card>
 
       <div className="grid gap-4 lg:grid-cols-[3fr_2fr]">
         <Card delay={120}>
@@ -146,6 +156,8 @@ export function OverviewPage() {
           <TxnRows txns={txns.slice(0, 8)} />
         )}
       </Card>
+
+      <Assistant />
     </>
   );
 }

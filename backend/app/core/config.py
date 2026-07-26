@@ -22,6 +22,14 @@ class Settings(BaseSettings):
     # There is NO authentication when this is on — only ever bind to localhost.
     local_mode: bool = False
 
+    # Background sync + daily balance snapshot cadence. 0 disables the loop entirely.
+    sync_interval_hours: float = 6.0
+
+    # AI assistant. Without a key the insights endpoint reports itself unavailable
+    # and the UI hides it — nothing is ever sent anywhere by default.
+    anthropic_api_key: str = ""
+    llm_model: str = "claude-sonnet-5"
+
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]

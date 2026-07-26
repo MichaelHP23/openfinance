@@ -3,9 +3,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
-from app.api import accounts, auth, connections, imports, transactions
+from app.api import accounts, auth, connections, imports, insights, transactions
 from app.api.deps import limiter
 from app.core.config import DEFAULT_SECRET_KEY, settings
+from app.core.scheduler import lifespan
 
 if settings.app_secret_key == DEFAULT_SECRET_KEY and settings.environment != "development":
     # This key derives the KEK for provider credentials. The default is published in
@@ -22,7 +23,7 @@ if settings.local_mode and settings.environment != "development":
 # loopback on any port. Anything else stays on the exact allowlist.
 LOOPBACK_ORIGIN_RE = r"^http://(localhost|127\.0\.0\.1)(:\d+)?$"
 
-app = FastAPI(title="OpenFinance API")
+app = FastAPI(title="OpenFinance API", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origin_list,
@@ -38,6 +39,7 @@ app.include_router(accounts.router)
 app.include_router(transactions.router)
 app.include_router(imports.router)
 app.include_router(connections.router)
+app.include_router(insights.router)
 
 
 @app.get("/health")

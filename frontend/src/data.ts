@@ -41,3 +41,12 @@ export function useTransactions(search = "") {
       apiFetch<Txn[]>(`/transactions${search ? `?search=${encodeURIComponent(search)}` : ""}`),
   });
 }
+
+export type NetWorthPoint = { on: string; assets: number; debts: number; net: number };
+
+export function useNetWorthHistory(days = 90) {
+  return useQuery({
+    queryKey: ["net-worth", days],
+    queryFn: () => apiFetch<NetWorthPoint[]>(`/snapshots/net-worth?days=${days}`),
+  });
+}

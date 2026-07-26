@@ -86,6 +86,27 @@ doubles up.
 
 Plaid slots into the same `BankProvider` protocol if SimpleFIN doesn't cover your bank.
 
+## AI assistant
+
+Optional and off by default. Put an `ANTHROPIC_API_KEY` in `backend/.env` and a
+"What's up with my money" card appears on the overview; without a key the endpoint
+reports itself unavailable and the UI hides it, so nothing leaves your machine.
+
+The assistant never sees your raw transactions and never does arithmetic. The app
+computes a digest — net worth, per-month income and spending, top merchants, largest
+transactions, likely subscriptions — and the model is given only that, with
+instructions that every figure it cites must come from it. `GET /insights/digest`
+returns those exact facts so you can check any claim it makes.
+
+Enabling it does mean a summary of your finances is sent to Anthropic's API.
+
+## Background sync
+
+The API runs a loop every `SYNC_INTERVAL_HOURS` (default 6) that syncs every
+connection and records a **daily balance snapshot** per account. Those snapshots are
+what the net-worth-over-time chart draws — balances are only knowable in the present,
+so a day that isn't recorded is lost. Set the interval to `0` to disable.
+
 ## Not here yet
 
 - Budgets, categorization rules, investments holdings, reports. See the roadmap in the

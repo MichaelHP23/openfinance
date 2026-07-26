@@ -3,6 +3,11 @@
 ## [Unreleased] — M0 Foundation
 
 ### Added
+- Daily balance snapshots + net worth over time chart, recorded by a background loop
+  that also syncs connections every `SYNC_INTERVAL_HOURS`.
+- Optional AI assistant: a computed digest goes to Claude, which interprets but never
+  calculates. Hidden entirely without `ANTHROPIC_API_KEY`; `/insights/digest` exposes
+  the facts it was given.
 - SimpleFIN Bridge provider: claim a setup token, encrypt the access URL, sync accounts
   and transactions with dedup on provider transaction ids. Connect / Sync now / Forget
   in the UI.
