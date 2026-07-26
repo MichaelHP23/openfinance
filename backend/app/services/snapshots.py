@@ -66,11 +66,20 @@ def capture(db: Session, household_id: uuid.UUID, on: date | None = None) -> int
     return written
 
 
-def net_worth_series(db: Session, household_id: uuid.UUID, days: int = 90) -> list[NetWorthPoint]:
-    """Net worth per captured day, oldest first."""
+def net_worth_series(
+    db: Session,
+    household_id: uuid.UUID,
+    days: int = 90,
+    types: set[AccountType] | None = None,
+) -> list[NetWorthPoint]:
+    """Net worth per captured day, oldest first.
+
+    `types` narrows it to a slice of the balance sheet — the investments page asks for
+    brokerage accounts only, and gets the same shape back.
+    """
     since = datetime.now(UTC).date() - timedelta(days=days)
 
-    rows = db.execute(
+    query = (
         select(BalanceSnapshot.captured_on, BalanceSnapshot.balance, Account.type)
         .join(Account, Account.id == BalanceSnapshot.account_id)
         .where(
@@ -78,7 +87,11 @@ def net_worth_series(db: Session, household_id: uuid.UUID, days: int = 90) -> li
             BalanceSnapshot.captured_on >= since,
         )
         .order_by(BalanceSnapshot.captured_on)
-    ).all()
+    )
+    if types:
+        query = query.where(Account.type.in_(types))
+
+    rows = db.execute(query).all()
 
     by_day: dict[date, list[Decimal]] = {}
     for captured_on, balance, account_type in rows:

@@ -1,7 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { apiFetch } from "../api/client";
-import { usd, usdCompact } from "../money";
+import { AllocationBar, AreaChart, BarChart } from "../charts";
+import { usd } from "../money";
 import { Card, Empty, PageHead } from "../ui/Shell";
 
 type InvestmentAccount = {
@@ -42,6 +43,11 @@ export function InvestmentsPage() {
     queryKey: ["investments"],
     queryFn: () => apiFetch<Summary>("/investments"),
   });
+  const { data: history = [] } = useQuery({
+    queryKey: ["investment-history"],
+    queryFn: () =>
+      apiFetch<{ on: string; net: number }[]>("/investments/history?days=90"),
+  });
 
   if (isLoading) return <Empty>Loading…</Empty>;
 
@@ -61,8 +67,6 @@ export function InvestmentsPage() {
     );
   }
 
-  const peak = Math.max(1, ...data.income_by_month.map((m) => m.total));
-
   return (
     <>
       <PageHead
@@ -81,32 +85,52 @@ export function InvestmentsPage() {
         <Stat label="Income · all recorded" value={usd(data.income_all_time)} />
       </div>
 
-      <Card delay={120}>
-        <h2 className="mb-4 text-sm font-medium">Holdings by account</h2>
-        <ul className="flex flex-col gap-4">
-          {data.accounts.map((a) => (
-            <li key={a.id}>
-              <div className="mb-1.5 flex flex-wrap justify-between gap-2 text-sm">
-                <Link to={`/accounts/${a.id}`} className="truncate hover:text-acid">
+      <Card delay={100}>
+        <div className="mb-4 flex items-baseline justify-between">
+          <h2 className="text-sm font-medium">Portfolio value</h2>
+          <span className="label">Last 90 days</span>
+        </div>
+        {history.length < 2 ? (
+          <Empty>
+            {history.length === 1
+              ? "One day recorded — the line starts once there are two."
+              : "Balances are recorded daily from now on; the line builds from here."}
+          </Empty>
+        ) : (
+          <AreaChart
+            valueLabel="Portfolio value"
+            points={history.map((p) => ({ label: p.on, value: p.net }))}
+          />
+        )}
+      </Card>
+
+      <Card className="mt-4" delay={140}>
+        <div className="mb-4 flex items-baseline justify-between">
+          <h2 className="text-sm font-medium">Allocation</h2>
+          <span className="label">Share of portfolio</span>
+        </div>
+        <AllocationBar
+          slices={data.accounts.map((a) => ({
+            label: a.name,
+            value: a.balance,
+            share: a.share,
+          }))}
+        />
+        <ul className="mt-5 flex flex-col gap-1.5 border-t border-line pt-4">
+          {data.accounts
+            .filter((a) => a.income > 0)
+            .map((a) => (
+              <li key={a.id} className="flex justify-between text-[13px]">
+                <Link to={`/accounts/${a.id}`} className="truncate text-muted hover:text-acid">
                   {a.name}
                 </Link>
-                <span className="tnum">
-                  {usd(a.balance)}
-                  <span className="ml-2 text-muted">{a.share}%</span>
-                </span>
-              </div>
-              <div className="h-1.5 overflow-hidden rounded-full bg-[#26262c]">
-                <div className="h-full rounded-full bg-acid/70" style={{ width: `${a.share}%` }} />
-              </div>
-              {a.income > 0 && (
-                <p className="label mt-1.5">{usd(a.income)} in dividends & interest</p>
-              )}
-            </li>
-          ))}
+                <span className="tnum text-acid">+{usd(a.income)} income</span>
+              </li>
+            ))}
         </ul>
       </Card>
 
-      <div className="mt-4 grid gap-4 lg:grid-cols-[3fr_2fr]">
+      <div className="mt-4 grid items-start gap-4 lg:grid-cols-[3fr_2fr]">
         <Card delay={180}>
           <div className="mb-5 flex items-baseline justify-between">
             <h2 className="text-sm font-medium">Dividends & interest</h2>
@@ -118,25 +142,12 @@ export function InvestmentsPage() {
               brokerage describes them too tersely to recognise.
             </Empty>
           ) : (
-            <>
-              <div className="flex h-36 gap-2">
-                {data.income_by_month.map((m) => (
-                  <div key={m.month} className="flex flex-1 flex-col items-center gap-2">
-                    <div className="flex w-full flex-1 items-end justify-center">
-                      <div
-                        title={`${monthLabel(m.month)}: ${usd(m.total)}`}
-                        className="w-3/5 rounded-t-sm bg-acid/80"
-                        style={{ height: `${(m.total / peak) * 100}%` }}
-                      />
-                    </div>
-                    <span className="label">{monthLabel(m.month)}</span>
-                  </div>
-                ))}
-              </div>
-              <p className="tnum mt-4 text-right text-[11px] text-muted">
-                peak {usdCompact(peak)}
-              </p>
-            </>
+            <BarChart
+              bars={data.income_by_month.map((m) => ({
+                label: monthLabel(m.month),
+                value: m.total,
+              }))}
+            />
           )}
         </Card>
 

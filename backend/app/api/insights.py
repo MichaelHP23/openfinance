@@ -80,6 +80,23 @@ def net_worth_history(
     ]
 
 
+@router.get("/investments/history", response_model=list[NetWorthPointOut])
+def investment_history(
+    days: int = 90,
+    hid: uuid.UUID = Depends(require_household),
+    db: Session = Depends(get_db),
+) -> list[NetWorthPointOut]:
+    """Portfolio value per captured day — the same snapshots, narrowed to brokerages."""
+    return [
+        NetWorthPointOut(
+            on=p.on.isoformat(), assets=float(p.assets), debts=float(p.debts), net=float(p.net)
+        )
+        for p in snapshots_service.net_worth_series(
+            db, hid, days=days, types=investments_service.INVESTMENT_TYPES
+        )
+    ]
+
+
 @router.get("/investments")
 def investments(
     hid: uuid.UUID = Depends(require_household), db: Session = Depends(get_db)

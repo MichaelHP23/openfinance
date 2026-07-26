@@ -85,3 +85,22 @@ def test_snapshots_do_not_leak_across_households(db):
     _accounts(db, mine)
     snapshots.capture(db, mine)
     assert snapshots.net_worth_series(db, theirs) == []
+
+
+def test_series_can_be_narrowed_to_investment_accounts(db):
+    from app.models.account import AccountType
+
+    hid = _household(db)
+    accounts_service.create(
+        db, hid, AccountCreate(type="checking", name="Checking", balance=Decimal(400))
+    )
+    accounts_service.create(
+        db, hid, AccountCreate(type="investment", name="Brokerage", balance=Decimal(2500))
+    )
+    snapshots.capture(db, hid)
+
+    everything = snapshots.net_worth_series(db, hid)
+    brokerage_only = snapshots.net_worth_series(db, hid, types={AccountType.investment})
+
+    assert everything[0].net == Decimal(2900)
+    assert brokerage_only[0].net == Decimal(2500)
