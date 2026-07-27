@@ -1,5 +1,8 @@
+# ponytail: restart policy instead of a supervisor — Docker Desktop's "start on login"
+# plus these three words is the whole "keep it running" story on a desktop box.
 services:
   postgres:
+    restart: unless-stopped
     image: postgres:17
     environment:
       POSTGRES_USER: openfinance
@@ -12,9 +15,11 @@ services:
       interval: 5s
       retries: 10
   redis:
+    restart: unless-stopped
     image: redis:7
     ports: ["6379:6379"]
   api:
+    restart: unless-stopped
     build: ./backend
     env_file:
       - path: ./backend/.env
@@ -31,6 +36,7 @@ services:
     ports: ["8000:8000"]
     command: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"
   web:
+    restart: unless-stopped
     build: ./frontend
     # No VITE_API_URL: the client derives the API host from whatever address the page
     # was opened on, so localhost, a LAN IP and a Tailscale name all work unchanged.
