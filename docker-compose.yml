@@ -50,10 +50,7 @@ services:
     # was opened on, so localhost, a LAN IP and a Tailscale name all work unchanged.
     depends_on: [api]
     ports: ["${TS_IP:?TS_IP must be set — see .env.example}:5173:5173"]
-    # Live source, so editing a file reloads the browser instead of needing a rebuild.
-    # The anonymous volume keeps the image's node_modules (Linux binaries) in place.
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
+    # Static build served by nginx. The frontend dev loop is `npm run dev` in ./frontend,
+    # not this container — it serves the built bundle, so edits need a rebuild.
 volumes:
   pgdata:
