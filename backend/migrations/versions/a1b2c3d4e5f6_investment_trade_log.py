@@ -18,7 +18,11 @@ down_revision: Union[str, Sequence[str], None] = "d5f2c1a83b70"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
-trade_type = sa.Enum("buy", "sell", "dividend", "split", name="trade_type")
+# create_type=False: the explicit .create() below owns the type. Without it, create_table
+# emits its own CREATE TYPE and the migration dies on "type trade_type already exists".
+trade_type = postgresql.ENUM(
+    "buy", "sell", "dividend", "split", name="trade_type", create_type=False
+)
 
 
 def upgrade() -> None:
@@ -87,6 +91,7 @@ def downgrade() -> None:
     op.drop_table("security_prices")
     op.drop_table("trades")
     op.drop_table("securities")
-    # Postgres does not drop an enum with its table. `account_type` in 199492b35732 has
-    # exactly that bug; a re-upgrade there fails on "type already exists". Not repeated.
+    # Postgres does not drop an enum with its table, so the type has to go explicitly or a
+    # re-upgrade fails on "type already exists". The older migrations had that bug until
+    # test_migrations.py started exercising downgrade.
     trade_type.drop(op.get_bind(), checkfirst=True)

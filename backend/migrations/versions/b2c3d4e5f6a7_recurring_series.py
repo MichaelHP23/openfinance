@@ -18,11 +18,18 @@ down_revision: Union[str, Sequence[str], None] = "a1b2c3d4e5f6"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
-recurring_cadence = sa.Enum(
-    "weekly", "biweekly", "monthly", "quarterly", "yearly", name="recurring_cadence"
+# create_type=False: see a1b2c3d4e5f6 — the explicit .create() calls own these types.
+recurring_cadence = postgresql.ENUM(
+    "weekly",
+    "biweekly",
+    "monthly",
+    "quarterly",
+    "yearly",
+    name="recurring_cadence",
+    create_type=False,
 )
-recurring_status = sa.Enum(
-    "active", "ended", "cancelled", "ignored", name="recurring_status"
+recurring_status = postgresql.ENUM(
+    "active", "ended", "cancelled", "ignored", name="recurring_status", create_type=False
 )
 
 

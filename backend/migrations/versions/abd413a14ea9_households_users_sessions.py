@@ -64,3 +64,6 @@ def downgrade() -> None:
     op.drop_table('users')
     op.drop_table('households')
     # ### end Alembic commands ###
+    # Postgres keeps an enum after its table goes, so a re-upgrade would hit
+    # "type role already exists". Autogenerate never emits this.
+    op.execute('DROP TYPE IF EXISTS role')

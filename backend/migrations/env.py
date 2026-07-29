@@ -18,7 +18,11 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-config.set_main_option("sqlalchemy.url", settings.database_url)
+# A caller that set the URL itself (the migration test, pointing at a throwaway container)
+# keeps it. This used to overwrite unconditionally, which silently redirected that test onto
+# the real database and dropped every table in it.
+if not config.get_main_option("sqlalchemy.url", None):
+    config.set_main_option("sqlalchemy.url", settings.database_url)
 
 # add your model's MetaData object here
 # for 'autogenerate' support

@@ -42,3 +42,5 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_provider_connections_household_id'), table_name='provider_connections')
     op.drop_table('provider_connections')
     # ### end Alembic commands ###
+    op.execute('DROP TYPE IF EXISTS provider')
+    op.execute('DROP TYPE IF EXISTS conn_status')

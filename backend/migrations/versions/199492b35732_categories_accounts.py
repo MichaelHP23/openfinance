@@ -59,3 +59,4 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_categories_household_id'), table_name='categories')
     op.drop_table('categories')
     # ### end Alembic commands ###
+    op.execute('DROP TYPE IF EXISTS account_type')
