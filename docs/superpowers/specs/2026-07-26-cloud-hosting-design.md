@@ -1,5 +1,11 @@
 # Cloud hosting design — moving OpenFinance to an always-on Tailscale host
 
+> **Partially superseded by `2026-07-29-oracle-hosting-design.md`.** The host is now Oracle
+> Always Free rather than a Hetzner CX22 — that shape is EU-only and could not have been
+> ordered in a US region as §3 recommends. §3, §4.1, §5, §7, §9 and §10 below are replaced
+> there. Everything else — §0 topology, §1 Model A vs B, §2 the code facts, §4.2-4.3 port
+> binding, §6 CORS, §8 the phone — remains current and is not duplicated in the newer spec.
+
 **Date:** 2026-07-26
 **Status:** Design spec. No application code, Dockerfile, or compose file was changed by
 this document.
