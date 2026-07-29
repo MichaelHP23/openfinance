@@ -8,7 +8,12 @@ services:
       POSTGRES_USER: openfinance
       POSTGRES_PASSWORD: openfinance
       POSTGRES_DB: openfinance
-    ports: ["5433:5432"]
+    # Loopback only. The spec says delete this, which is right for the instance but breaks
+    # running the API on a host against the compose database (backend/.env.example points
+    # DATABASE_URL at localhost). 127.0.0.1 is never reachable from the public IP, so it
+    # meets the same goal on the VM while keeping the dev loop.
+    ports: ["127.0.0.1:5433:5432"]
+    command: postgres -c shared_buffers=768MB
     volumes: ["pgdata:/var/lib/postgresql/data"]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U openfinance"]
@@ -17,7 +22,7 @@ services:
   redis:
     restart: unless-stopped
     image: redis:7
-    ports: ["6379:6379"]
+    ports: ["127.0.0.1:6379:6379"]
   api:
     restart: unless-stopped
     build: ./backend
@@ -33,7 +38,10 @@ services:
     depends_on:
       postgres: {condition: service_healthy}
       redis: {condition: service_started}
-    ports: ["8000:8000"]
+    # ponytail: ${VAR:?msg} makes compose refuse to start when TS_IP is unset, instead of
+    # interpolating empty and publishing on 0.0.0.0. Fail closed — on a host with a public
+    # IP the quiet fallback is an unauthenticated finance API on the internet.
+    ports: ["${TS_IP:?TS_IP must be set — see .env.example}:8000:8000"]
     command: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"
   web:
     restart: unless-stopped
@@ -41,7 +49,7 @@ services:
     # No VITE_API_URL: the client derives the API host from whatever address the page
     # was opened on, so localhost, a LAN IP and a Tailscale name all work unchanged.
     depends_on: [api]
-    ports: ["5173:5173"]
+    ports: ["${TS_IP:?TS_IP must be set — see .env.example}:5173:5173"]
     # Live source, so editing a file reloads the browser instead of needing a rebuild.
     # The anonymous volume keeps the image's node_modules (Linux binaries) in place.
     volumes:
