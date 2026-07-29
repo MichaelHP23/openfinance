@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { expect, test, vi } from "vitest";
 import { HoldingsList } from "./holdings";
@@ -24,7 +24,7 @@ const holdings = [
   },
 ];
 
-const apiFetch = vi.fn(async (path: string) => {
+const apiFetch = vi.fn(async (path: string, _opts?: RequestInit): Promise<any> => {
   if (path.startsWith("/investments/holdings")) {
     return { holdings, priced_through: "2026-07-24" };
   }
