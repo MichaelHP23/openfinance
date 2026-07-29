@@ -17,9 +17,11 @@ from app.api.deps import limiter
 from app.core.config import DEFAULT_SECRET_KEY, settings
 from app.core.scheduler import lifespan
 
-if settings.app_secret_key == DEFAULT_SECRET_KEY and settings.environment != "development":
+if settings.app_secret_key == DEFAULT_SECRET_KEY:
     # This key derives the KEK for provider credentials. The default is published in
-    # the repo, so anything encrypted under it is effectively plaintext.
+    # the repo, so anything encrypted under it is effectively plaintext. Deliberately
+    # unconditional: LOCAL_MODE pins ENVIRONMENT=development, so an environment-gated
+    # guard is off in precisely the configuration that gets deployed.
     raise RuntimeError("APP_SECRET_KEY is still the published default — set a real one")
 
 if settings.local_mode and settings.environment != "development":

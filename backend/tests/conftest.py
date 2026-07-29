@@ -1,3 +1,9 @@
+import os
+
+# Must precede any app import: Settings is instantiated at app.core.config import time,
+# and the guard in app.main refuses the published default key in every environment.
+os.environ.setdefault("APP_SECRET_KEY", "test-only-key-not-the-published-default")
+
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
