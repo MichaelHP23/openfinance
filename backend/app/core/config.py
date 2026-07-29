@@ -30,6 +30,13 @@ class Settings(BaseSettings):
     anthropic_api_key: str = ""
     llm_model: str = "claude-sonnet-5"
 
+    # Market prices. Empty key -> the unofficial Yahoo endpoint, which needs no signup but
+    # has no terms and can break without notice. Set a Twelve Data key for the supported
+    # path (free tier: 800 calls/day, 8/min as of 2026-07).
+    twelve_data_api_key: str = ""
+    price_refresh_hours: float = 24.0
+    base_currency: str = "USD"
+
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]

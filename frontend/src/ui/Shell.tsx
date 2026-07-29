@@ -7,6 +7,9 @@ const NAV = [
   { to: "/accounts", label: "Accounts", short: "Accounts", end: false, glyph: "▤" },
   { to: "/investments", label: "Investments", short: "Invest", end: false, glyph: "◈" },
   { to: "/transactions", label: "Transactions", short: "Activity", end: false, glyph: "⇅" },
+  // Five tabs is the ceiling: each is flex-1, so a 360px phone gives 72px a tab and
+  // "Bills" is the longest short label that still fits on one line.
+  { to: "/recurring", label: "Recurring", short: "Bills", end: false, glyph: "↻" },
 ];
 
 export function Shell({ children, localMode }: { children: ReactNode; localMode: boolean }) {
@@ -135,6 +138,18 @@ export function Card({
     >
       {children}
     </section>
+  );
+}
+
+/** ponytail: lifted here when a second page needed it. OverviewPage and
+ *  InvestmentsPage still carry their own copies — folding those in is a
+ *  cosmetic edit to pages this change has no other reason to touch. */
+export function Stat({ label, value, tone = "" }: { label: string; value: string; tone?: string }) {
+  return (
+    <div className="card p-4">
+      <p className="label">{label}</p>
+      <p className={`tnum mt-2 text-xl ${tone}`}>{value}</p>
+    </div>
   );
 }
 

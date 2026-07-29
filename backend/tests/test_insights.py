@@ -12,6 +12,7 @@ from app.schemas.transaction import TxnCreate
 from app.services import accounts as accounts_service
 from app.services import digest as digest_service
 from app.services import insights
+from app.services import recurring as recurring_service
 from app.services import transactions as txn_service
 
 
@@ -102,9 +103,12 @@ def test_digest_ranks_merchants_by_spend_and_ignores_income(db):
 def test_digest_flags_a_repeating_charge_as_recurring(db):
     hid = _household(db)
     _seed(db, hid)
+    recurring_service.detect(db, hid)
     facts = digest_service.build(db, hid)
-    recurring = {r["merchant"] for r in facts.recurring_candidates}
-    assert "Netflix" in recurring
+    by_merchant = {r["merchant"]: r for r in facts.recurring_candidates}
+    assert "Netflix" in by_merchant
+    assert by_merchant["Netflix"]["cadence"] == "monthly"
+    assert by_merchant["Netflix"]["next_expected_on"] is not None
 
 
 def test_digest_separates_income_and_spending_per_month(db):

@@ -18,8 +18,25 @@ const compact = new Intl.NumberFormat("en-US", {
   maximumFractionDigits: 1,
 });
 
+// Share counts are not money: no symbol, and a fractional-share brokerage reports
+// more decimals than a currency has. Four is where the sheet stops caring.
+const unitFmt = new Intl.NumberFormat("en-US", { maximumFractionDigits: 4 });
+
+// Percentages arrive already scaled (21.6 means 21.6%), so this is a plain number
+// format with a forced sign rather than style: "percent".
+const pctFmt = new Intl.NumberFormat("en-US", {
+  minimumFractionDigits: 1,
+  maximumFractionDigits: 1,
+  signDisplay: "always",
+});
+
 export const usd = (v: string | number) => fmt.format(num(v));
 export const usdCompact = (v: string | number) => compact.format(num(v));
+export const units = (v: string | number) => unitFmt.format(num(v));
+export const pct = (v: string | number) => `${pctFmt.format(num(v))}%`;
+
+/** Gain green, loss muted — the same tones the rest of the app uses for income. */
+export const pctTone = (v: string | number) => (num(v) >= 0 ? "text-acid" : "text-muted");
 
 export const signed = (v: string | number) => (num(v) > 0 ? `+${usd(v)}` : usd(v));
 
@@ -84,3 +101,12 @@ export const prettyType = (t: string) => t.replace(/_/g, " ");
 // negative-offset timezone shows every transaction one day early.
 export const shortDate = (iso: string) =>
   new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+
+/** Same, plus the year — a trade log runs for decades and "Mar 14" is ambiguous in it. */
+export const longDate = (iso: string) =>
+  new Date(iso).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  });

@@ -3,7 +3,16 @@ from fastapi.middleware.cors import CORSMiddleware
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
-from app.api import accounts, auth, connections, imports, insights, transactions
+from app.api import (
+    accounts,
+    auth,
+    connections,
+    imports,
+    insights,
+    investments,
+    recurring,
+    transactions,
+)
 from app.api.deps import limiter
 from app.core.config import DEFAULT_SECRET_KEY, settings
 from app.core.scheduler import lifespan
@@ -54,6 +63,8 @@ app.include_router(transactions.router)
 app.include_router(imports.router)
 app.include_router(connections.router)
 app.include_router(insights.router)
+app.include_router(investments.router)
+app.include_router(recurring.router)
 
 
 @app.get("/health")

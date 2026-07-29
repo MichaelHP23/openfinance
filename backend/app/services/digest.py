@@ -17,8 +17,10 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models.account import Account
+from app.models.recurring import SeriesStatus
 from app.models.transaction import Transaction
 from app.services import investments as investments_service
+from app.services import recurring as recurring_service
 from app.services.snapshots import LIABILITY_TYPES, net_worth_series
 
 
@@ -135,19 +137,19 @@ def build(db: Session, household_id: uuid.UUID, months_back: int = 6) -> Digest:
         for t in sorted(txns, key=lambda t: t.amount)[:8]
     ]
 
-    # A merchant charged a similar amount in 3+ distinct months looks like a subscription.
-    for name, (_total, count) in ranked:
-        charges = [t for t in txns if (t.merchant_normalized or t.merchant_raw) == name]
-        months_seen = {_month_key(t.posted_at) for t in charges}
-        amounts = {_f(abs(t.amount)) for t in charges}
-        if len(months_seen) >= 3 and len(amounts) <= 2 and int(count) >= 3:
-            digest.recurring_candidates.append(
-                {
-                    "merchant": name,
-                    "typical_amount": max(amounts),
-                    "months_seen": len(months_seen),
-                }
-            )
+    # Recurring detection itself lives in app.services.recurring and runs on its own
+    # schedule (scheduler tick, POST /recurring/refresh) — the digest just reads the
+    # persisted result rather than recomputing it inline.
+    digest.recurring_candidates = [
+        {
+            "merchant": s.label,
+            "typical_amount": _f(s.typical_amount),
+            "cadence": s.cadence.value,
+            "next_expected_on": s.next_expected_on.isoformat() if s.next_expected_on else None,
+            "confidence": s.confidence,
+        }
+        for s in recurring_service.list_for(db, household_id, status=SeriesStatus.active)
+    ]
 
     invest = investments_service.summary(db, household_id)
     digest.investments = {

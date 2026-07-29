@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { monthTotals, monthlySeries, netWorth, topMerchants, usd } from "./money";
+import { longDate, monthTotals, monthlySeries, netWorth, pct, topMerchants, units, usd } from "./money";
 import type { Account, Txn } from "./data";
 
 const acct = (type: string, balance: string): Account => ({
@@ -72,4 +72,29 @@ describe("topMerchants", () => {
 
 it("formats money", () => {
   expect(usd("-9.9900")).toBe("-$9.99");
+});
+
+describe("units", () => {
+  it("is not money — no symbol, and fractional shares survive", () => {
+    expect(units("112.50000000")).toBe("112.5");
+    expect(units("0.00012345")).toBe("0.0001");
+  });
+
+  it("groups thousands", () => {
+    expect(units("12345")).toBe("12,345");
+  });
+});
+
+describe("pct", () => {
+  it("always carries a sign, to one decimal", () => {
+    expect(pct("21.6")).toBe("+21.6%");
+    expect(pct("-4.25")).toBe("-4.3%");
+    expect(pct(0)).toBe("+0.0%");
+  });
+});
+
+describe("longDate", () => {
+  it("keeps the year, because a trade log spans them", () => {
+    expect(longDate("2026-03-14")).toBe("Mar 14, 2026");
+  });
 });

@@ -8,6 +8,7 @@ import { AccountsPage } from "./pages/AccountsPage";
 import { AccountDetailPage } from "./pages/AccountDetailPage";
 import { InvestmentsPage } from "./pages/InvestmentsPage";
 import { TransactionsPage } from "./pages/TransactionsPage";
+import { RecurringPage } from "./pages/RecurringPage";
 import { Shell } from "./ui/Shell";
 
 const qc = new QueryClient();
@@ -65,7 +66,7 @@ export default function App() {
             }
           />
           <Route
-            path="/investments"
+            path="/investments/*"
             element={
               <Protected>
                 <InvestmentsPage />
@@ -77,6 +78,14 @@ export default function App() {
             element={
               <Protected>
                 <TransactionsPage />
+              </Protected>
+            }
+          />
+          <Route
+            path="/recurring"
+            element={
+              <Protected>
+                <RecurringPage />
               </Protected>
             }
           />
