@@ -291,6 +291,34 @@ only addition to the blast radius, and it closes a TODO that was already written
 - **No monitoring stack.** The failure mode that matters is "instance reclaimed," and the
   signal for that is Oracle's email plus the app not loading.
 
+### 9.1 Cloudflare, reconsidered and rejected (29 July 2026)
+
+Raised after Phase A shipped: host it through Cloudflare and make it private instead.
+Three different things go by that name, and none of them is cheaper than this plan.
+
+- **Workers/Pages + D1** is a rewrite, not a migration. FastAPI, SQLAlchemy and Alembic
+  do not run there, and D1 is SQLite — the money invariant is Postgres `NUMERIC(19,4)`
+  end to end.
+- **Cloudflare Containers** needs the paid Workers plan and sleeps when idle. Scale-to-zero
+  is the same defect that eliminated Render and Neon in §1; the scheduler is the whole point.
+- **Tunnel + Access** is the only real candidate, and it is a *front door*, not a host — it
+  replaces Tailscale, not this instance. It still costs more:
+  - Named tunnels require a domain on a zone you control (~$5–11/yr).
+    `trycloudflare.com` quick tunnels are ephemeral, randomly named, and cannot carry
+    Access policies.
+  - Cloudflare terminates TLS, putting a third party in the path over bank data.
+    Tailscale is end-to-end WireGuard with nobody in the middle.
+  - **The failure modes invert, and that decides it.** A wrong Tailscale ACL makes the app
+    unreachable. A wrong Access policy makes an unauthenticated finance API world-readable.
+    With `LOCAL_MODE=true` there is no login behind it, so the network *is* the auth —
+    prefer the mechanism that fails closed.
+  - `frontend/src/api/client.ts:9` pins port 8000 on the page's hostname, so serving on
+    443 also needs two hostnames plus `VITE_API_URL`, or an nginx `/api` proxy.
+
+What Tunnel would genuinely buy: browser access with no client install, and the ability to
+show the app to someone on their own laptop. §9's first bullet already priced that and
+declined it. Revisit only if that requirement changes — not for cost.
+
 ---
 
 ## Sources
