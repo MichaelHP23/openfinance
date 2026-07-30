@@ -15,6 +15,7 @@ default install is single-user with no login.
 
 ```bash
 cp backend/.env.example backend/.env   # then set APP_SECRET_KEY
+cp .env.example .env                   # TS_IP — the address the stack publishes on
 docker compose up -d
 ```
 
@@ -88,23 +89,36 @@ Plaid slots into the same `BankProvider` protocol if SimpleFIN doesn't cover you
 
 ## Reaching it from your phone
 
-The app has **no login** in local mode, so it must never be port-forwarded or given a
-public hostname — anyone who found it would have full access to your finances.
+The app runs on an always-on cloud instance that has joined a
+[Tailscale](https://tailscale.com/) network. Install Tailscale on your phone, sign it into
+the same account, and open `http://openfinance:5173` from anywhere.
 
-Use a private network instead. [Tailscale](https://tailscale.com/) is the easy one:
-install it on this machine and on your phone, sign both into the same account, then
-open `http://<machine-name>:5173` from the phone anywhere in the world. Nothing is
-exposed publicly and no ports are opened.
+**Your PC does not need to be on.** It is just another client on the tailnet, the same as
+the phone. The instance holds Postgres, the API and the background scheduler, so syncing
+and daily balance snapshots continue whatever your desktop is doing.
 
-On your own wifi, the LAN address works with no extra software: `http://<lan-ip>:5173`.
+Nothing is exposed to the public internet — the instance's public IP has no listening
+port, and the only route in is the tailnet. That is what makes it safe for the app to have
+**no login at all** in local mode. The flip side: a device without Tailscale cannot reach
+it, so there is no showing this to someone on their own laptop.
 
-The client derives the API host from whatever address you loaded the page on, so no
-configuration changes between localhost, LAN and tailnet. In development the API
-accepts origins from loopback, RFC1918 LAN ranges and Tailscale (100.64/10, `*.ts.net`)
-— public origins still have to be listed explicitly in `CORS_ORIGINS`.
+The client derives the API host from whatever address you loaded the page on, so nothing
+is configured per-device. In development the API accepts origins from loopback, RFC1918
+LAN ranges and Tailscale (100.64/10, `*.ts.net`); the bare MagicDNS short name
+(`http://openfinance:5173`) needs listing in `CORS_ORIGINS`, which the deploy sets.
 
-Your machine has to be awake with `docker compose up -d` running for any of this to
-answer.
+Full design and the provisioning runbook:
+`docs/superpowers/specs/2026-07-29-oracle-hosting-design.md`.
+
+## Local development
+
+The `web` container serves a **built** bundle and does not hot-reload. For the frontend dev
+loop, run Vite directly and use compose for the backing services:
+
+```bash
+docker compose up -d postgres redis api
+cd frontend && npm run dev
+```
 
 ## AI assistant
 
