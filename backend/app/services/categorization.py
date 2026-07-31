@@ -1,0 +1,89 @@
+"""Rule-based transaction categorization.
+
+Deterministic. No ML, no LLM in the matching path — the LLM only ever proposes rules
+for a human to confirm (see `app/api/categories.py::suggest`).
+
+Merchant matching runs against `recurring.merchant_key()`, the same normalization
+subscription detection uses. That means "TST* WHOLE FOODS #4471" and "WHOLE FOODS
+MARKET 22" reduce to comparable strings, and a rule the user writes once behaves the
+same in both features. Patterns are normalized with the same function on the way in, so
+the user can type "Whole Foods" and not think about it.
+"""
+
+import re
+import uuid
+
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from app.models.category_rule import CategoryRule, MatchType
+from app.models.transaction import Transaction
+from app.services.recurring import merchant_key
+
+# Patterns run against merchant keys, which are short. Capping the pattern keeps a
+# pathological regex from having anything to chew on; there is no untrusted author here
+# anyway, since the only writer is the household itself.
+PATTERN_MAX = 200
+
+
+class BadPattern(Exception):
+    """A rule pattern that cannot be stored: empty, too long, or an invalid regex."""
+
+
+def compile_pattern(match_type: MatchType, pattern: str) -> None:
+    """Validate a pattern at write time. Raises BadPattern; returns nothing."""
+    if not pattern or not pattern.strip():
+        raise BadPattern("Pattern is empty")
+    if len(pattern) > PATTERN_MAX:
+        raise BadPattern(f"Pattern is longer than {PATTERN_MAX} characters")
+    if match_type is MatchType.merchant_regex:
+        try:
+            re.compile(pattern)
+        except re.error as exc:
+            raise BadPattern(f"Invalid regular expression: {exc}") from exc
+
+
+def _merchant_of(txn: Transaction) -> str:
+    return merchant_key(txn.merchant_normalized or txn.merchant_raw)
+
+
+def rule_matches(rule: CategoryRule, txn: Transaction) -> bool:
+    """True when every non-null condition on the rule holds for the transaction."""
+    if rule.account_id is not None and rule.account_id != txn.account_id:
+        return False
+    if rule.min_amount is not None and txn.amount < rule.min_amount:
+        return False
+    if rule.max_amount is not None and txn.amount > rule.max_amount:
+        return False
+
+    name = _merchant_of(txn)
+    if rule.match_type is MatchType.merchant_regex:
+        try:
+            return re.search(rule.pattern, name) is not None
+        except re.error:
+            # A stored pattern that no longer compiles is dead, not fatal. Skipping it
+            # keeps every other rule working.
+            return False
+    needle = merchant_key(rule.pattern)
+    if rule.match_type is MatchType.merchant_exact:
+        return name == needle
+    return needle in name
+
+
+def pick_category(rules: list[CategoryRule], txn: Transaction) -> uuid.UUID | None:
+    """First matching rule wins. Caller supplies the rules already in priority order."""
+    for rule in rules:
+        if rule_matches(rule, txn):
+            return rule.category_id
+    return None
+
+
+def rules_for(db: Session, household_id: uuid.UUID) -> list[CategoryRule]:
+    """Every rule for the household, in the order they should be tried."""
+    return list(
+        db.scalars(
+            select(CategoryRule)
+            .where(CategoryRule.household_id == household_id)
+            .order_by(CategoryRule.priority, CategoryRule.created_at)
+        )
+    )
