@@ -224,7 +224,7 @@ import enum
 import uuid
 from decimal import Decimal
 
-from sqlalchemy import ForeignKey, Integer, Numeric, String
+from sqlalchemy import Enum, ForeignKey, Integer, Numeric, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -256,7 +256,7 @@ class CategoryRule(Base, UUIDMixin, TimestampMixin):
         UUID(as_uuid=True), ForeignKey("households.id"), index=True
     )
     match_type: Mapped[MatchType] = mapped_column(
-        __import__("sqlalchemy").Enum(MatchType, name="rule_match_type")
+        Enum(MatchType, name="rule_match_type")
     )
     pattern: Mapped[str] = mapped_column(String(200))
     min_amount: Mapped[Decimal | None] = mapped_column(Numeric(19, 4), nullable=True)
@@ -269,15 +269,9 @@ class CategoryRule(Base, UUIDMixin, TimestampMixin):
     )
     priority: Mapped[int] = mapped_column(Integer, default=100)
     source: Mapped[RuleSource] = mapped_column(
-        __import__("sqlalchemy").Enum(RuleSource, name="rule_source"),
+        Enum(RuleSource, name="rule_source"),
         default=RuleSource.user,
     )
-```
-
-Replace the two `__import__("sqlalchemy").Enum` calls with a normal `from sqlalchemy import Enum` at the top and plain `Enum(...)` — the inline form above is only there to keep the import list visible. Final import line:
-
-```python
-from sqlalchemy import Enum, ForeignKey, Integer, Numeric, String
 ```
 
 Add to `backend/app/models/__init__.py`, alongside the existing model imports:
