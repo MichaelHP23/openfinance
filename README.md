@@ -66,6 +66,10 @@ npm run lint
 - **Overview** — net worth, monthly cash flow, top merchants, recent activity.
 - **Accounts** — nine account types, assets and liabilities netted correctly.
 - **Transactions** — manual entry, merchant search, CSV import that dedups on re-import.
+- **Categories** — a rule list that sorts transactions as they arrive, from CSV import or
+  from a bank sync. Rules match on merchant, amount, and account; the first one in the
+  list wins, and you can reorder them. Nothing is a black box: every category on a
+  transaction traces to a rule you can open.
 - Local mode (no login) or full email/password auth: argon2id, server-side sessions,
   rate limits.
 - `BankProvider` protocol with a `ManualProvider`; credentials sealed with AES-GCM
@@ -134,6 +138,10 @@ returns those exact facts so you can check any claim it makes.
 
 Enabling it does mean a summary of your finances is sent to Anthropic's API.
 
+The assistant can also propose categories for merchants it hasn't seen sorted. That call
+sends merchant *names* and the category list — no amounts, no dates, no accounts — and
+its proposals are written only for the ones you tick.
+
 ## Background sync
 
 The API runs a loop every `SYNC_INTERVAL_HOURS` (default 6) that syncs every
@@ -143,8 +151,7 @@ so a day that isn't recorded is lost. Set the interval to `0` to disable.
 
 ## Not here yet
 
-- Budgets, categorization rules, investments holdings, reports. See the roadmap in the
-  design spec.
+- Budgets, reports. See the roadmap in `docs/superpowers/specs/2026-07-30-origin-parity-design.md`.
 - Scheduled background syncing — for now, syncing is a button.
 - Editing or deleting an account from the UI.
 

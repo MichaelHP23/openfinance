@@ -2,8 +2,8 @@
 
 ## [Unreleased] — Origin parity program
 
-P1 (categorization) is being built on the `p1-categorization` branch. Nothing has merged
-to `main` yet.
+P1 (categorization) is complete on the `p1-categorization` branch. Nothing has merged to
+`main` yet.
 
 ### Added
 - The system category taxonomy — 12 groups, 63 leaves — seeded into the `categories` table
@@ -14,6 +14,24 @@ to `main` yet.
 - Categorization application services: apply rules to newly supplied uncategorized rows,
   backfill history without overwriting hand-set categories by default, and roll up
   uncategorized transactions by normalized merchant.
+- New transactions land categorized: CSV import and bank sync each run `apply_to` before
+  committing, so an import or a sync is one transaction — rows and their categories land
+  together or neither does. Manual single-row entry (`POST /transactions`) is not wired
+  to this; only import and sync categorize on the way in.
+- Category and rule management: `GET/POST /categories`, `PATCH/DELETE /categories/{id}`
+  (system rows 403 on write — the row exists, so not 404); `GET/POST /category-rules`,
+  `PATCH/DELETE /category-rules/{id}`, `POST /category-rules/reorder`, and
+  `POST /category-rules/preview`, which dry-runs a candidate rule against real history
+  without saving it. `POST /categorization/backfill` and
+  `GET /categorization/uncategorized` expose the same engine over existing rows.
+- Optional LLM category suggestions (`POST /categories/suggest`): the model sees merchant
+  names and the taxonomy only — no amounts, dates, accounts, or balances — and writes
+  nothing itself; suggestions become rules only for the ones the user ticks. No API key,
+  no suggestions — 503, not a silent no-op.
+- Frontend: a category picker on every transaction row with an "always categorize this
+  way?" prompt, declined by default so no rule is written unasked; a rules list on the
+  Transactions page you can reorder and run against history; an uncategorized-merchants
+  panel that can call the suggestion endpoint.
 
 ### Fixed
 - Nothing yet, but recorded: `ruff` and `mypy` do not pass on this repo and have not for a

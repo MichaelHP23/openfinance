@@ -11,7 +11,7 @@ than what was kept.
 
 | Phase | What it is | Plan | State |
 |---|---|---|---|
-| **P1** | Categorization engine — rules, system taxonomy, auto-apply, backfill | `docs/superpowers/plans/2026-07-30-p1-categorization.md` | **In progress on branch `p1-categorization`.** Tasks 1–3 of 12 done: taxonomy/rule model, matching engine, and safe backfill/uncategorized rollup. |
+| **P1** | Categorization engine — rules, system taxonomy, auto-apply, backfill | `docs/superpowers/plans/2026-07-30-p1-categorization.md` | **Done on branch `p1-categorization`, not yet merged to `main`.** All 12 tasks landed: taxonomy/rule model, matching engine, backfill/uncategorized rollup, CRUD + reorder + preview endpoints, wiring into CSV import and sync, LLM suggestions (propose-only), and the transactions-page UI. See `.superpowers/sdd/2026-07-30-p1-categorization/progress.md` for deferred minors. |
 | P2 | Budgets — monthly, rollover on read, median suggest | not yet written | Blocked on P1 |
 | P3 | Goals + daily cash-flow forecast + `can_i_afford` | not yet written | Blocked on P2 |
 | P4 | AI advisor v2 — read-only tool calling, visible call trace | not yet written | Blocked on P1–P3 |
@@ -79,7 +79,14 @@ npm run lint
 npm run e2e      # needs `docker compose up -d` + `npm run dev`
 ```
 
-All six must pass before claiming a phase done. Paste the output; do not assert it.
+All seven must pass before claiming a phase done. Paste the output; do not assert it.
+
+`npm run e2e` currently runs `smoke.spec.ts`, `mobile.spec.ts`, and (as of P1)
+`categorization.spec.ts`. `mobile.spec.ts` fails on `main` as of this writing —
+`getByRole("heading", { name: "Accounts" })` on the Accounts page matches both the page's
+`<h1>` and the "Your accounts" `<h2>` card title, a strict-mode violation predating P1 and
+unrelated to categorization (`AccountsPage.tsx` has no P1 commits). `smoke.spec.ts` and
+`categorization.spec.ts` pass. Worth its own fix; not blocking P1.
 
 ## Deliberate deviations from the spec
 
