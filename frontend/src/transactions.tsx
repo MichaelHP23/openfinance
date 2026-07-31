@@ -2,6 +2,8 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { API_BASE, apiFetch } from "./api/client";
+import { CategoryPicker } from "./CategoryPicker";
+import { useCreateRule } from "./categories";
 import { useTransactions, type Txn } from "./data";
 import { shortDate, usd } from "./money";
 import { Empty } from "./ui/Shell";
@@ -11,24 +13,76 @@ export function TxnRows({ txns }: { txns: Txn[] }) {
     <table className="w-full">
       <tbody>
         {txns.map((t, i) => (
-          <tr
-            key={t.id}
-            className="rise border-b border-line/60 transition-colors last:border-0 hover:bg-[rgba(237,234,228,0.02)]"
-            style={{ "--d": `${Math.min(i, 12) * 30}ms` } as React.CSSProperties}
-          >
-            <td className="tnum w-24 py-3 text-[13px] text-muted">{shortDate(t.posted_at)}</td>
-            <td className="py-3 text-sm">{t.merchant_raw}</td>
-            <td
-              className={`tnum py-3 text-right text-sm ${
-                Number(t.amount) > 0 ? "text-acid" : "text-bone"
-              }`}
-            >
-              {Number(t.amount) > 0 ? `+${usd(t.amount)}` : usd(t.amount)}
-            </td>
-          </tr>
+          <TxnRow key={t.id} txn={t} index={i} />
         ))}
       </tbody>
     </table>
+  );
+}
+
+function TxnRow({ txn, index }: { txn: Txn; index: number }) {
+  const qc = useQueryClient();
+  const createRule = useCreateRule();
+  const [askAbout, setAskAbout] = useState<string | null>(null);
+
+  const setCategory = useMutation({
+    mutationFn: (categoryId: string | null) =>
+      apiFetch(`/transactions/${txn.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ category_id: categoryId }),
+      }),
+    onSuccess: (_data, categoryId) => {
+      qc.invalidateQueries({ queryKey: ["transactions"] });
+      qc.invalidateQueries({ queryKey: ["uncategorized"] });
+      // Offer the rule rather than writing one: a one-off recategorization is common,
+      // and a rule the user didn't ask for is a rule they have to find and delete.
+      if (categoryId) setAskAbout(categoryId);
+    },
+  });
+
+  return (
+    <>
+      <tr
+        className="rise border-b border-line/60 transition-colors last:border-0 hover:bg-[rgba(237,234,228,0.02)]"
+        style={{ "--d": `${Math.min(index, 12) * 30}ms` } as React.CSSProperties}
+      >
+        <td className="tnum w-24 py-3 text-[13px] text-muted">{shortDate(txn.posted_at)}</td>
+        <td className="py-3 text-sm">{txn.merchant_raw}</td>
+        <td className="py-3">
+          <CategoryPicker
+            value={txn.category_id}
+            onChange={(id) => setCategory.mutate(id)}
+            ariaLabel={`Category for ${txn.merchant_raw}`}
+          />
+        </td>
+        <td
+          className={`tnum py-3 text-right text-sm ${
+            Number(txn.amount) > 0 ? "text-acid" : "text-bone"
+          }`}
+        >
+          {Number(txn.amount) > 0 ? `+${usd(txn.amount)}` : usd(txn.amount)}
+        </td>
+      </tr>
+      {askAbout && (
+        <tr>
+          <td colSpan={4} className="pb-3 text-[13px] text-muted">
+            Always categorize “{txn.merchant_raw}” this way?{" "}
+            <button
+              className="text-acid"
+              onClick={() => {
+                createRule.mutate({ pattern: txn.merchant_raw, category_id: askAbout });
+                setAskAbout(null);
+              }}
+            >
+              Make it a rule
+            </button>{" "}
+            <button className="ml-2" onClick={() => setAskAbout(null)}>
+              No
+            </button>
+          </td>
+        </tr>
+      )}
+    </>
   );
 }
 
