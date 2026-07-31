@@ -6,8 +6,13 @@ for a human to confirm (see `app/api/categories.py::suggest`).
 Merchant matching runs against `recurring.merchant_key()`, the same normalization
 subscription detection uses. That means "TST* WHOLE FOODS #4471" and "WHOLE FOODS
 MARKET 22" reduce to comparable strings, and a rule the user writes once behaves the
-same in both features. Patterns are normalized with the same function on the way in, so
-the user can type "Whole Foods" and not think about it.
+same in both features. `merchant_contains` and `merchant_exact` patterns are normalized
+with the same function on the way in, so the user can type "Whole Foods" and not think
+about it. `merchant_regex` patterns are the exception: they run against the normalized
+merchant name, but the pattern text itself is never passed through `merchant_key` — doing
+so would destroy regex metacharacters (`.`, `*`, `(`, `|`, ...) — so a regex author writes
+directly against the lowercased, punctuation-stripped merchant key and supplies their own
+case-insensitivity if they need it.
 """
 
 import re
@@ -44,6 +49,9 @@ def compile_pattern(match_type: MatchType, pattern: str) -> None:
             re.compile(pattern)
         except re.error as exc:
             raise BadPattern(f"Invalid regular expression: {exc}") from exc
+    elif not merchant_key(pattern):
+        # "#1234" normalizes to "" and `"" in name` is always True -> silent catch-all.
+        raise BadPattern("Pattern has no letters or digits to match on")
 
 
 def _merchant_of(txn: Transaction) -> str:

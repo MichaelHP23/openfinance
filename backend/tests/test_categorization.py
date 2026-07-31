@@ -128,6 +128,21 @@ def test_bad_regex_is_rejected_not_raised_at_match_time():
         raise AssertionError("expected BadPattern")
 
 
+def test_pattern_that_normalizes_to_nothing_is_rejected():
+    # Otherwise it stores fine and then matches every transaction: "" in name is True.
+    for match_type in (MatchType.merchant_contains, MatchType.merchant_exact):
+        try:
+            compile_pattern(match_type, "#1234")
+        except BadPattern:
+            pass
+        else:
+            raise AssertionError(f"expected BadPattern for {match_type}")
+
+
+def test_regex_pattern_keeps_its_metacharacters():
+    compile_pattern(MatchType.merchant_regex, r"^whole ?foods.*")
+
+
 def test_overlong_pattern_is_rejected():
     try:
         compile_pattern(MatchType.merchant_contains, "x" * 201)
