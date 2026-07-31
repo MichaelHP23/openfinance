@@ -1,5 +1,21 @@
 # Changelog
 
+## [Unreleased] — Origin parity program
+
+Planning only so far; no behaviour has changed.
+
+### Added
+- `TASK.md` — current phase, gates, and the invariants that outrank convenience, so an
+  agent picking this up cold knows what is in flight.
+- Design spec for the Origin parity program
+  (`docs/superpowers/specs/2026-07-30-origin-parity-design.md`): five sequential phases
+  covering categorization, budgets, goals and cash-flow forecasting, a tool-calling AI
+  advisor, and reports/tax/document-vault. Credit-score monitoring, CFP access, and a
+  high-yield cash account are cut by name — they need a bureau contract, a licensed
+  human, and a banking partner respectively.
+- Implementation plan for P1, categorization
+  (`docs/superpowers/plans/2026-07-30-p1-categorization.md`).
+
 ## [Unreleased] — M0 Foundation
 
 ### Added
