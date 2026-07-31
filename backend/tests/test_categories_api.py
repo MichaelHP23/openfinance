@@ -1,4 +1,6 @@
 import uuid
+from datetime import UTC, datetime
+from decimal import Decimal
 
 import pytest
 from fastapi.testclient import TestClient
@@ -6,22 +8,53 @@ from fastapi.testclient import TestClient
 from app.api.deps import require_household
 from app.core.db import get_db
 from app.main import app
+from app.models.account import Account, AccountType
 from app.models.household import Household
+from app.models.transaction import Transaction
 from app.services.categories import ensure_system_categories, system_category_id
 
 app.state.limiter.enabled = False
 
 
 @pytest.fixture
-def client(db):
-    household = Household(name="Categories Household")
-    db.add(household)
+def household(db):
+    row = Household(name="Categories Household")
+    db.add(row)
     db.commit()
+    return row
+
+
+@pytest.fixture
+def account(db, household):
+    row = Account(
+        household_id=household.id,
+        type=AccountType.checking,
+        name="Everyday",
+        currency="USD",
+    )
+    db.add(row)
+    db.commit()
+    return row
+
+
+@pytest.fixture
+def client(db, household):
     app.dependency_overrides[get_db] = lambda: db
     app.dependency_overrides[require_household] = lambda: household.id
     yield TestClient(app)
     app.dependency_overrides.pop(get_db, None)
     app.dependency_overrides.pop(require_household, None)
+
+
+def _txn(household, account, merchant: str, amount: str = "-42.00") -> Transaction:
+    return Transaction(
+        household_id=household.id,
+        account_id=account.id,
+        posted_at=datetime(2026, 7, 1, tzinfo=UTC),
+        amount=Decimal(amount),
+        currency="USD",
+        merchant_raw=merchant,
+    )
 
 
 def test_list_returns_system_taxonomy(client, db):
@@ -83,3 +116,93 @@ def test_custom_category_can_be_deleted(client, db):
     created = client.post("/categories", json={"name": "Boat Fuel"}).json()
     assert client.delete(f"/categories/{created['id']}").status_code == 200
     assert created["id"] not in {c["id"] for c in client.get("/categories").json()}
+
+
+def test_create_rule_and_list_in_priority_order(client, db):
+    ensure_system_categories(db)
+    groceries = str(system_category_id("Food & Drink/Groceries"))
+    coffee = str(system_category_id("Food & Drink/Coffee"))
+    client.post(
+        "/category-rules",
+        json={"pattern": "whole foods", "category_id": groceries, "priority": 50},
+    )
+    client.post(
+        "/category-rules",
+        json={"pattern": "blue bottle", "category_id": coffee, "priority": 10},
+    )
+    rules = client.get("/category-rules").json()
+    assert [r["pattern"] for r in rules] == ["blue bottle", "whole foods"]
+
+
+def test_invalid_regex_is_rejected_with_422(client, db):
+    ensure_system_categories(db)
+    res = client.post(
+        "/category-rules",
+        json={
+            "match_type": "merchant_regex",
+            "pattern": "(unclosed",
+            "category_id": str(system_category_id("Food & Drink/Groceries")),
+        },
+    )
+    assert res.status_code == 422
+    assert "regular expression" in res.json()["detail"]
+
+
+def test_rule_pointing_at_a_foreign_category_is_rejected(client, db):
+    ensure_system_categories(db)
+    res = client.post(
+        "/category-rules",
+        json={"pattern": "whole foods", "category_id": str(uuid.uuid4())},
+    )
+    assert res.status_code == 422
+
+
+def test_reorder_rewrites_priority(client, db):
+    ensure_system_categories(db)
+    groceries = str(system_category_id("Food & Drink/Groceries"))
+    a = client.post(
+        "/category-rules", json={"pattern": "aaa", "category_id": groceries}
+    ).json()
+    b = client.post(
+        "/category-rules", json={"pattern": "bbb", "category_id": groceries}
+    ).json()
+    client.post("/category-rules/reorder", json={"rule_ids": [b["id"], a["id"]]})
+    assert [r["pattern"] for r in client.get("/category-rules").json()] == ["bbb", "aaa"]
+
+
+def test_preview_counts_matches_without_saving(client, db, household, account):
+    ensure_system_categories(db)
+    db.add(_txn(household, account, "WHOLE FOODS #4471"))
+    db.commit()
+
+    res = client.post(
+        "/category-rules/preview",
+        json={
+            "pattern": "whole foods",
+            "category_id": str(system_category_id("Food & Drink/Groceries")),
+        },
+    )
+    assert res.json() == {"matches": 1}
+    assert client.get("/category-rules").json() == []
+
+
+def test_backfill_endpoint_reports_what_changed(client, db, household, account):
+    ensure_system_categories(db)
+    db.add(_txn(household, account, "WHOLE FOODS"))
+    db.commit()
+    client.post(
+        "/category-rules",
+        json={
+            "pattern": "whole foods",
+            "category_id": str(system_category_id("Food & Drink/Groceries")),
+        },
+    )
+    assert client.post("/categorization/backfill", json={}).json() == {"changed": 1}
+
+
+def test_uncategorized_endpoint_rolls_up(client, db, household, account):
+    db.add(_txn(household, account, "SHELL OIL #221", "-9.00"))
+    db.commit()
+    rows = client.get("/categorization/uncategorized").json()
+    assert rows[0]["merchant"] == "shell oil"
+    assert rows[0]["count"] == 1

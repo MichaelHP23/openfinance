@@ -7,6 +7,7 @@ from app.api import (
     accounts,
     auth,
     categories,
+    category_rules,
     connections,
     imports,
     insights,
@@ -63,6 +64,7 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # ty
 app.include_router(auth.router)
 app.include_router(accounts.router)
 app.include_router(categories.router)
+app.include_router(category_rules.router)
 app.include_router(transactions.router)
 app.include_router(imports.router)
 app.include_router(connections.router)

@@ -1,6 +1,8 @@
 from app.models.household import Household
 from app.schemas.account import AccountCreate
-from app.services import accounts
+from app.schemas.category import CategoryCreate, RuleCreate, RuleUpdate
+from app.services import accounts, categories, categorization
+from app.services.categories import ensure_system_categories, system_category_id
 
 
 def _household(db) -> Household:
@@ -19,3 +21,43 @@ def test_accounts_isolated_by_household(db):
     assert {x.name for x in accounts.list_for(db, h1)} == {"H1"}
     assert accounts.get(db, h2, a.id) is None  # cannot read across household
     assert accounts.get(db, h1, a.id) is not None
+
+
+def test_category_rules_isolated_by_household(db):
+    h1, h2 = _household(db).id, _household(db).id
+    ensure_system_categories(db)
+    groceries = system_category_id("Food & Drink/Groceries")
+    rule = categorization.create_rule(
+        db, h1, RuleCreate(pattern="whole foods", category_id=groceries)
+    )
+    categorization.create_rule(
+        db, h2, RuleCreate(pattern="blue bottle", category_id=groceries)
+    )
+
+    assert {r.pattern for r in categorization.rules_for(db, h1)} == {"whole foods"}
+    assert categorization.get_rule(db, h2, rule.id) is None
+    assert categorization.update_rule(db, h2, rule.id, RuleUpdate(priority=1)) is None
+    assert categorization.delete_rule(db, h2, rule.id) is False
+    assert categorization.get_rule(db, h1, rule.id) is not None
+
+
+def test_custom_categories_isolated_but_system_ones_are_shared(db):
+    h1, h2 = _household(db).id, _household(db).id
+    ensure_system_categories(db)
+    mine = categories.create(db, h1, CategoryCreate(name="Boat Fuel"))
+
+    assert categories.get(db, h2, mine.id) is None
+    assert categories.get(db, h1, mine.id) is not None
+    # System rows carry no household_id, so both sides see the same taxonomy.
+    shared = system_category_id("Food & Drink/Groceries")
+    assert categories.get(db, h1, shared) is not None
+    assert categories.get(db, h2, shared) is not None
+    # ...and a rule in one household cannot borrow the other's custom category.
+    try:
+        categorization.create_rule(
+            db, h2, RuleCreate(pattern="boats", category_id=mine.id)
+        )
+    except categorization.UnknownCategory:
+        pass
+    else:
+        raise AssertionError("expected UnknownCategory")

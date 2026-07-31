@@ -26,6 +26,8 @@ from sqlalchemy.orm import Session
 
 from app.models.category_rule import CategoryRule, MatchType
 from app.models.transaction import Transaction
+from app.schemas.category import RuleCreate, RuleUpdate
+from app.services import categories
 from app.services.recurring import merchant_key
 
 # Patterns run against merchant keys, which are short. Capping the pattern keeps a
@@ -179,3 +181,99 @@ def uncategorized_merchants(
     ]
     result.sort(key=lambda item: (-item.count, item.merchant))
     return result[:limit]
+
+
+class UnknownCategory(Exception):
+    """A rule can only point at a category this household can actually see."""
+
+
+def _check_category(db: Session, household_id: uuid.UUID, category_id: uuid.UUID) -> None:
+    if categories.get(db, household_id, category_id) is None:
+        raise UnknownCategory(str(category_id))
+
+
+def _rule_row(household_id: uuid.UUID, data: RuleCreate) -> CategoryRule:
+    return CategoryRule(
+        household_id=household_id,
+        match_type=data.match_type,
+        pattern=data.pattern,
+        category_id=data.category_id,
+        min_amount=data.min_amount,
+        max_amount=data.max_amount,
+        account_id=data.account_id,
+        priority=data.priority,
+    )
+
+
+def create_rule(db: Session, household_id: uuid.UUID, data: RuleCreate) -> CategoryRule:
+    compile_pattern(data.match_type, data.pattern)
+    _check_category(db, household_id, data.category_id)
+    row = _rule_row(household_id, data)
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+def get_rule(
+    db: Session, household_id: uuid.UUID, rule_id: uuid.UUID
+) -> CategoryRule | None:
+    return db.scalar(
+        select(CategoryRule).where(
+            CategoryRule.id == rule_id, CategoryRule.household_id == household_id
+        )
+    )
+
+
+def update_rule(
+    db: Session, household_id: uuid.UUID, rule_id: uuid.UUID, data: RuleUpdate
+) -> CategoryRule | None:
+    row = get_rule(db, household_id, rule_id)
+    if row is None:
+        return None
+    fields = data.model_dump(exclude_unset=True)
+    compile_pattern(
+        fields.get("match_type", row.match_type), fields.get("pattern", row.pattern)
+    )
+    if "category_id" in fields:
+        _check_category(db, household_id, fields["category_id"])
+    for field, value in fields.items():
+        setattr(row, field, value)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+def delete_rule(db: Session, household_id: uuid.UUID, rule_id: uuid.UUID) -> bool:
+    row = get_rule(db, household_id, rule_id)
+    if row is None:
+        return False
+    db.delete(row)
+    db.commit()
+    return True
+
+
+def reorder(db: Session, household_id: uuid.UUID, rule_ids: list[uuid.UUID]) -> int:
+    """Rewrite priority to match the given order. Ids not listed keep their place at
+    the end, in their existing order."""
+    by_id = {r.id: r for r in rules_for(db, household_id)}
+    listed = set(rule_ids)
+    ordered = [by_id[i] for i in rule_ids if i in by_id]
+    ordered += [r for r in by_id.values() if r.id not in listed]
+    for index, row in enumerate(ordered):
+        row.priority = (index + 1) * 10
+    db.commit()
+    return len(ordered)
+
+
+def preview(db: Session, household_id: uuid.UUID, data: RuleCreate) -> int:
+    """How many existing transactions a rule would match. Writes nothing."""
+    compile_pattern(data.match_type, data.pattern)
+    candidate = _rule_row(household_id, data)
+    # Never added to the session, but autoflush would still try to persist it the moment
+    # the query below runs, so the read is explicitly held outside the flush.
+    with db.no_autoflush:
+        txns = db.scalars(
+            select(Transaction).where(Transaction.household_id == household_id)
+        )
+        return sum(1 for t in txns if rule_matches(candidate, t))
