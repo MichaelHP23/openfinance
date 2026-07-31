@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.models.transaction import Transaction
 from app.schemas.transaction import TxnCreate, TxnUpdate
-from app.services import accounts
+from app.services import accounts, categorization
 
 
 class AccountNotInHousehold(Exception):
@@ -31,6 +31,9 @@ def create(db: Session, household_id: uuid.UUID, data: TxnCreate) -> Transaction
         notes=data.notes,
     )
     db.add(txn)
+    # Same treatment CSV import and sync give a new row. `apply_to` leaves a category the
+    # caller set alone, so typing one in by hand still wins over the rules.
+    categorization.apply_to(db, household_id, [txn])
     db.commit()
     db.refresh(txn)
     return txn

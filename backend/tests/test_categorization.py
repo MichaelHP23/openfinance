@@ -39,7 +39,9 @@ from app.models.category_rule import CategoryRule, MatchType
 from app.models.household import Household
 from app.models.transaction import Transaction
 from app.schemas.account import AccountCreate
-from app.services import accounts, categorization
+from app.schemas.category import RuleCreate
+from app.schemas.transaction import TxnCreate
+from app.services import accounts, categorization, transactions
 from app.services.categorization import (
     BadPattern,
     compile_pattern,
@@ -317,3 +319,47 @@ def test_uncategorized_rollup_groups_by_normalized_merchant(db):
     assert by_name["shell oil"].count == 2
     assert by_name["shell oil"].total == Decimal("-20.00")
     assert by_name["kroger"].count == 1
+
+
+def test_a_hand_entered_transaction_is_categorized_too(db):
+    """A rule the user wrote should hold however the row arrives, not only on import."""
+    household, account = _household_and_account(db)
+    ensure_system_categories(db)
+    categorization.create_rule(
+        db, household.id, RuleCreate(pattern="whole foods", category_id=GROCERIES)
+    )
+
+    txn = transactions.create(
+        db,
+        household.id,
+        TxnCreate(
+            account_id=account.id,
+            posted_at=datetime(2026, 7, 1, tzinfo=UTC),
+            amount=Decimal("-42.00"),
+            currency="USD",
+            merchant_raw="WHOLE FOODS #4471",
+        ),
+    )
+    assert txn.category_id == GROCERIES
+
+
+def test_a_category_typed_in_by_hand_beats_the_rules(db):
+    household, account = _household_and_account(db)
+    ensure_system_categories(db)
+    categorization.create_rule(
+        db, household.id, RuleCreate(pattern="whole foods", category_id=GROCERIES)
+    )
+
+    txn = transactions.create(
+        db,
+        household.id,
+        TxnCreate(
+            account_id=account.id,
+            posted_at=datetime(2026, 7, 1, tzinfo=UTC),
+            amount=Decimal("-42.00"),
+            currency="USD",
+            merchant_raw="WHOLE FOODS #4471",
+            category_id=COFFEE,
+        ),
+    )
+    assert txn.category_id == COFFEE
