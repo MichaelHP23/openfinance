@@ -192,6 +192,34 @@ def test_apply_sets_category_on_uncategorized_rows(db):
     assert txns[1].category_id is None
 
 
+def test_apply_does_not_touch_a_transaction_from_another_household(db):
+    household, _account = _household_and_account(db)
+    other_household, other_account = _household_and_account(db)
+    ensure_system_categories(db)
+    db.add(
+        CategoryRule(
+            household_id=household.id,
+            match_type=MatchType.merchant_contains,
+            pattern="whole foods",
+            category_id=GROCERIES,
+            priority=100,
+        )
+    )
+    other_txn = Transaction(
+        household_id=other_household.id,
+        account_id=other_account.id,
+        posted_at=datetime(2026, 7, 1, tzinfo=UTC),
+        amount=Decimal("-42.00"),
+        currency="USD",
+        merchant_raw="WHOLE FOODS",
+    )
+    db.add(other_txn)
+    db.commit()
+
+    assert categorization.apply_to(db, household.id, [other_txn]) == 0
+    assert other_txn.category_id is None
+
+
 def test_backfill_leaves_hand_set_categories_alone(db):
     household, account = _household_and_account(db)
     ensure_system_categories(db)
