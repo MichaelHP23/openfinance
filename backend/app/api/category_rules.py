@@ -6,12 +6,14 @@ from sqlalchemy.orm import Session
 from app.api.deps import require_household
 from app.core.db import get_db
 from app.models.category_rule import CategoryRule
+from app.providers.llm import ClaudeProvider, LLMError
 from app.schemas.category import (
     BackfillIn,
     ReorderIn,
     RuleCreate,
     RuleOut,
     RuleUpdate,
+    SuggestResponse,
     UncategorizedOut,
 )
 from app.services import categorization
@@ -107,3 +109,18 @@ def list_uncategorized(
         UncategorizedOut(merchant=m.merchant, count=m.count, total=m.total)
         for m in categorization.uncategorized_merchants(db, hid)
     ]
+
+
+@router.post("/categories/suggest", response_model=SuggestResponse)
+def suggest(
+    hid: uuid.UUID = Depends(require_household), db: Session = Depends(get_db)
+) -> SuggestResponse:
+    """Proposals only. Confirming one is a normal POST /category-rules by the client."""
+    provider = ClaudeProvider()
+    if not provider.configured:
+        raise HTTPException(status_code=503, detail="No ANTHROPIC_API_KEY configured")
+    try:
+        suggestions, model = categorization.suggest_rules(db, hid, provider)
+    except LLMError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    return SuggestResponse(suggestions=suggestions, model=model)

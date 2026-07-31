@@ -11,6 +11,7 @@ from app.main import app
 from app.models.account import Account, AccountType
 from app.models.household import Household
 from app.models.transaction import Transaction
+from app.services import categorization
 from app.services.categories import ensure_system_categories, system_category_id
 
 app.state.limiter.enabled = False
@@ -206,3 +207,77 @@ def test_uncategorized_endpoint_rolls_up(client, db, household, account):
     rows = client.get("/categorization/uncategorized").json()
     assert rows[0]["merchant"] == "shell oil"
     assert rows[0]["count"] == 1
+
+
+def _fake_llm(monkeypatch, reply: str, *, configured: bool = True) -> dict[str, str]:
+    """Stand in for ClaudeProvider. Records the prompt so the test can inspect it."""
+    seen: dict[str, str] = {}
+
+    def complete(self, system, prompt, max_tokens=1200):
+        seen["system"] = system
+        seen["prompt"] = prompt
+        return reply
+
+    monkeypatch.setattr("app.providers.llm.ClaudeProvider.complete", complete)
+    monkeypatch.setattr(
+        "app.providers.llm.ClaudeProvider.configured", property(lambda self: configured)
+    )
+    return seen
+
+
+def test_suggest_returns_proposals_and_writes_nothing(
+    client, db, household, account, monkeypatch
+):
+    ensure_system_categories(db)
+    db.add(_txn(household, account, "WHOLE FOODS #4471"))
+    db.commit()
+    seen = _fake_llm(
+        monkeypatch, '[{"merchant": "whole foods", "category": "Food & Drink/Groceries"}]'
+    )
+
+    body = client.post("/categories/suggest").json()
+    assert body["suggestions"][0]["merchant"] == "whole foods"
+    assert body["suggestions"][0]["category_name"] == "Groceries"
+    assert categorization.rules_for(db, household.id) == []
+    # Only names and the taxonomy leave the machine — no amounts, no dates, no accounts.
+    assert "42.00" not in seen["prompt"]
+    assert "2026-07-01" not in seen["prompt"]
+
+
+def test_suggest_is_503_without_an_api_key(client, db, monkeypatch):
+    _fake_llm(monkeypatch, "[]", configured=False)
+    assert client.post("/categories/suggest").status_code == 503
+
+
+def test_suggest_drops_a_category_the_model_invented(
+    client, db, household, account, monkeypatch
+):
+    ensure_system_categories(db)
+    db.add(_txn(household, account, "WHOLE FOODS"))
+    db.commit()
+    _fake_llm(monkeypatch, '[{"merchant": "whole foods", "category": "Nonsense/Invented"}]')
+    assert client.post("/categories/suggest").json()["suggestions"] == []
+
+
+def test_suggest_drops_a_merchant_the_model_invented(
+    client, db, household, account, monkeypatch
+):
+    ensure_system_categories(db)
+    db.add(_txn(household, account, "WHOLE FOODS"))
+    db.commit()
+    _fake_llm(
+        monkeypatch, '[{"merchant": "never asked", "category": "Food & Drink/Groceries"}]'
+    )
+    assert client.post("/categories/suggest").json()["suggestions"] == []
+
+
+def test_suggest_survives_a_model_that_does_not_answer_in_json(
+    client, db, household, account, monkeypatch
+):
+    ensure_system_categories(db)
+    db.add(_txn(household, account, "WHOLE FOODS"))
+    db.commit()
+    _fake_llm(monkeypatch, "Sure! Here are my thoughts on groceries.")
+    res = client.post("/categories/suggest")
+    assert res.status_code == 200
+    assert res.json()["suggestions"] == []
