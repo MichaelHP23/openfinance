@@ -311,6 +311,34 @@ def test_a_different_amount_on_the_same_day_is_not_a_duplicate(db):
     assert result.transactions_added == 1
 
 
+def test_sync_categorizes_new_transactions(db):
+    """A synced transaction lands categorized, same as an imported one."""
+    from app.models.category_rule import CategoryRule, MatchType
+    from app.services.categories import ensure_system_categories, system_category_id
+
+    hid = _household(db)
+    conn = _conn(db, hid)
+
+    ensure_system_categories(db)
+    coffee = system_category_id("Food & Drink/Coffee")
+    db.add(
+        CategoryRule(
+            household_id=hid,
+            match_type=MatchType.merchant_contains,
+            pattern="coffee",
+            category_id=coffee,
+            priority=100,
+        )
+    )
+    db.commit()
+
+    result = sync_connection(db, hid, conn, FakeProvider(ACCOUNTS, TXNS))
+
+    assert result.categorized == 1
+    txn = next(t for t in txn_service.list_for(db, hid) if t.merchant_raw == "Coffee")
+    assert txn.category_id == coffee
+
+
 def test_full_resync_reaches_back_a_year_even_after_syncing(db):
     """Resuming from the last sync is right for routine runs, but a backfill has to be
     able to ask for the whole window again."""

@@ -17,6 +17,7 @@ from app.models.account import Account, AccountType
 from app.models.connection import ConnStatus, ProviderConnection
 from app.models.transaction import Transaction
 from app.providers.base import BankProvider, TxnDTO
+from app.services import categorization
 
 INITIAL_HISTORY_DAYS = 365
 
@@ -28,6 +29,7 @@ class SyncResult:
     transactions_added: int = 0
     transactions_skipped: int = 0
     errors: list[str] = field(default_factory=list)
+    categorized: int = 0
 
 
 def _account_type(raw: str) -> AccountType:
@@ -127,6 +129,7 @@ def sync_connection(
             continue
         resolved.append(txn_dto)
 
+    added: list[Transaction] = []
     for txn_dto in resolved:
         target = by_external[txn_dto.account_external_id]
         shape = _shape(target.id, txn_dto)
@@ -136,20 +139,23 @@ def sync_connection(
             held[shape] -= 1
             result.transactions_skipped += 1
             continue
-        db.add(
-            Transaction(
-                household_id=household_id,
-                account_id=target.id,
-                posted_at=txn_dto.posted_at,
-                amount=txn_dto.amount,
-                currency=txn_dto.currency,
-                merchant_raw=txn_dto.merchant_raw,
-                external_id=txn_dto.external_id,
-            )
+        txn = Transaction(
+            household_id=household_id,
+            account_id=target.id,
+            posted_at=txn_dto.posted_at,
+            amount=txn_dto.amount,
+            currency=txn_dto.currency,
+            merchant_raw=txn_dto.merchant_raw,
+            external_id=txn_dto.external_id,
         )
+        db.add(txn)
+        added.append(txn)
         seen.add((target.id, txn_dto.external_id))
         result.transactions_added += 1
 
+    # Categorize before the commit so a sync is one transaction: either the rows and
+    # their categories land together, or neither does.
+    result.categorized = categorization.apply_to(db, household_id, added)
     conn.last_synced_at = datetime.now(UTC)
     conn.status = ConnStatus.active
     db.commit()
