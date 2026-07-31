@@ -16,6 +16,7 @@ export type Txn = {
   merchant_raw: string;
   amount: string;
   currency: string;
+  category_id: string | null;
 };
 
 export const ACCOUNT_TYPES = [
