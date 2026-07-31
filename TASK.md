@@ -11,7 +11,7 @@ than what was kept.
 
 | Phase | What it is | Plan | State |
 |---|---|---|---|
-| **P1** | Categorization engine — rules, system taxonomy, auto-apply, backfill | `docs/superpowers/plans/2026-07-30-p1-categorization.md` | **In progress on branch `p1-categorization`.** Task 1 of 12 done and reviewed clean. |
+| **P1** | Categorization engine — rules, system taxonomy, auto-apply, backfill | `docs/superpowers/plans/2026-07-30-p1-categorization.md` | **In progress on branch `p1-categorization`.** Tasks 1–3 of 12 done: taxonomy/rule model, matching engine, and safe backfill/uncategorized rollup. |
 | P2 | Budgets — monthly, rollover on read, median suggest | not yet written | Blocked on P1 |
 | P3 | Goals + daily cash-flow forecast + `can_i_afford` | not yet written | Blocked on P2 |
 | P4 | AI advisor v2 — read-only tool calling, visible call trace | not yet written | Blocked on P1–P3 |

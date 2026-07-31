@@ -36,7 +36,10 @@ from datetime import UTC, datetime
 from decimal import Decimal
 
 from app.models.category_rule import CategoryRule, MatchType
+from app.models.household import Household
 from app.models.transaction import Transaction
+from app.schemas.account import AccountCreate
+from app.services import accounts, categorization
 from app.services.categorization import (
     BadPattern,
     compile_pattern,
@@ -139,3 +142,135 @@ def test_a_rule_with_a_broken_pattern_never_matches():
     # validation change must not take down categorization for every other rule.
     r = _rule(match_type=MatchType.merchant_regex, pattern="(unclosed")
     assert not rule_matches(r, _txn("ANYTHING"))
+
+
+def _household_and_account(db):
+    household = Household(name="Categorization test household")
+    db.add(household)
+    db.commit()
+    account = accounts.create(
+        db, household.id, AccountCreate(type="checking", name="Categorization checking")
+    )
+    return household, account
+
+
+def test_apply_sets_category_on_uncategorized_rows(db):
+    household, account = _household_and_account(db)
+    ensure_system_categories(db)
+    db.add(
+        CategoryRule(
+            household_id=household.id,
+            match_type=MatchType.merchant_contains,
+            pattern="whole foods",
+            category_id=GROCERIES,
+            priority=100,
+        )
+    )
+    txns = [
+        Transaction(
+            household_id=household.id,
+            account_id=account.id,
+            posted_at=datetime(2026, 7, 1, tzinfo=UTC),
+            amount=Decimal("-42.00"),
+            currency="USD",
+            merchant_raw="WHOLE FOODS #4471",
+        ),
+        Transaction(
+            household_id=household.id,
+            account_id=account.id,
+            posted_at=datetime(2026, 7, 2, tzinfo=UTC),
+            amount=Decimal("-9.00"),
+            currency="USD",
+            merchant_raw="SHELL OIL",
+        ),
+    ]
+    db.add_all(txns)
+    db.commit()
+
+    assert categorization.apply_to(db, household.id, txns) == 1
+    assert txns[0].category_id == GROCERIES
+    assert txns[1].category_id is None
+
+
+def test_backfill_leaves_hand_set_categories_alone(db):
+    household, account = _household_and_account(db)
+    ensure_system_categories(db)
+    db.add(
+        CategoryRule(
+            household_id=household.id,
+            match_type=MatchType.merchant_contains,
+            pattern="whole foods",
+            category_id=GROCERIES,
+            priority=100,
+        )
+    )
+    hand_set = Transaction(
+        household_id=household.id,
+        account_id=account.id,
+        posted_at=datetime(2026, 7, 1, tzinfo=UTC),
+        amount=Decimal("-42.00"),
+        currency="USD",
+        merchant_raw="WHOLE FOODS",
+        category_id=COFFEE,
+    )
+    db.add(hand_set)
+    db.commit()
+
+    assert categorization.backfill(db, household.id) == 0
+    db.refresh(hand_set)
+    assert hand_set.category_id == COFFEE
+
+
+def test_backfill_can_overwrite_categories_when_requested(db):
+    household, account = _household_and_account(db)
+    ensure_system_categories(db)
+    db.add(
+        CategoryRule(
+            household_id=household.id,
+            match_type=MatchType.merchant_contains,
+            pattern="whole foods",
+            category_id=GROCERIES,
+            priority=100,
+        )
+    )
+    hand_set = Transaction(
+        household_id=household.id,
+        account_id=account.id,
+        posted_at=datetime(2026, 7, 1, tzinfo=UTC),
+        amount=Decimal("-42.00"),
+        currency="USD",
+        merchant_raw="WHOLE FOODS",
+        category_id=COFFEE,
+    )
+    db.add(hand_set)
+    db.commit()
+
+    assert categorization.backfill(db, household.id, only_uncategorized=False) == 1
+    db.refresh(hand_set)
+    assert hand_set.category_id == GROCERIES
+
+
+def test_uncategorized_rollup_groups_by_normalized_merchant(db):
+    household, account = _household_and_account(db)
+    db.add_all(
+        [
+            Transaction(
+                household_id=household.id,
+                account_id=account.id,
+                posted_at=datetime(2026, 7, day, tzinfo=UTC),
+                amount=Decimal("-10.00"),
+                currency="USD",
+                merchant_raw=raw,
+            )
+            for day, raw in [(1, "SHELL OIL #221"), (2, "SHELL OIL #907"), (3, "KROGER")]
+        ]
+    )
+    db.commit()
+
+    by_name = {
+        row.merchant: row
+        for row in categorization.uncategorized_merchants(db, household.id)
+    }
+    assert by_name["shell oil"].count == 2
+    assert by_name["shell oil"].total == Decimal("-20.00")
+    assert by_name["kroger"].count == 1

@@ -11,6 +11,9 @@ to `main` yet.
   are identical on every install and the seeder is idempotent.
 - `category_rules` table: merchant/amount/account conditions, tried in priority order,
   first match wins.
+- Categorization application services: apply rules to newly supplied uncategorized rows,
+  backfill history without overwriting hand-set categories by default, and roll up
+  uncategorized transactions by normalized merchant.
 
 ### Fixed
 - Nothing yet, but recorded: `ruff` and `mypy` do not pass on this repo and have not for a

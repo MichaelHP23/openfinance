@@ -12,6 +12,9 @@ the user can type "Whole Foods" and not think about it.
 
 import re
 import uuid
+from collections import defaultdict
+from dataclasses import dataclass
+from decimal import Decimal
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -87,3 +90,84 @@ def rules_for(db: Session, household_id: uuid.UUID) -> list[CategoryRule]:
             .order_by(CategoryRule.priority, CategoryRule.created_at)
         )
     )
+
+
+def apply_to(
+    db: Session,
+    household_id: uuid.UUID,
+    txns: list[Transaction],
+    rules: list[CategoryRule] | None = None,
+) -> int:
+    """Categorize supplied uncategorized rows in place without committing."""
+    if rules is None:
+        rules = rules_for(db, household_id)
+    if not rules:
+        return 0
+
+    changed = 0
+    for txn in txns:
+        if txn.household_id != household_id:
+            continue
+        if txn.category_id is not None:
+            continue
+        category_id = pick_category(rules, txn)
+        if category_id is not None:
+            txn.category_id = category_id
+            changed += 1
+    return changed
+
+
+def backfill(
+    db: Session, household_id: uuid.UUID, *, only_uncategorized: bool = True
+) -> int:
+    """Apply the household's rules to historical transactions and commit the result."""
+    query = select(Transaction).where(Transaction.household_id == household_id)
+    if only_uncategorized:
+        query = query.where(Transaction.category_id.is_(None))
+
+    rules = rules_for(db, household_id)
+    if not rules:
+        return 0
+
+    changed = 0
+    for txn in db.scalars(query):
+        category_id = pick_category(rules, txn)
+        if category_id is not None and category_id != txn.category_id:
+            txn.category_id = category_id
+            changed += 1
+    db.commit()
+    return changed
+
+
+@dataclass
+class UncategorizedMerchant:
+    merchant: str
+    count: int
+    total: Decimal
+
+
+def uncategorized_merchants(
+    db: Session, household_id: uuid.UUID, limit: int = 100
+) -> list[UncategorizedMerchant]:
+    """Roll uncategorized household transactions up by normalized merchant."""
+    counts: dict[str, int] = defaultdict(int)
+    totals: dict[str, Decimal] = defaultdict(Decimal)
+    rows = db.scalars(
+        select(Transaction).where(
+            Transaction.household_id == household_id,
+            Transaction.category_id.is_(None),
+        )
+    )
+    for txn in rows:
+        merchant = _merchant_of(txn)
+        if not merchant:
+            continue
+        counts[merchant] += 1
+        totals[merchant] += txn.amount
+
+    result = [
+        UncategorizedMerchant(merchant=merchant, count=counts[merchant], total=totals[merchant])
+        for merchant in counts
+    ]
+    result.sort(key=lambda item: (-item.count, item.merchant))
+    return result[:limit]
