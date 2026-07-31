@@ -2,9 +2,22 @@
 
 ## [Unreleased] — Origin parity program
 
-Planning only so far; no behaviour has changed.
+P1 (categorization) is being built on the `p1-categorization` branch. Nothing has merged
+to `main` yet.
 
 ### Added
+- The system category taxonomy — 12 groups, 63 leaves — seeded into the `categories` table
+  that has existed and gone unused since M0. Ids are uuid5 over the category path, so they
+  are identical on every install and the seeder is idempotent.
+- `category_rules` table: merchant/amount/account conditions, tried in priority order,
+  first match wins.
+
+### Fixed
+- Nothing yet, but recorded: `ruff` and `mypy` do not pass on this repo and have not for a
+  while — 129 and 24 errors respectively, in `portfolio.py`, `trade_import.py`,
+  `scheduler.py`, and `test_trades.py`. The README claims otherwise. See `TASK.md`.
+
+### Planning
 - `TASK.md` — current phase, gates, and the invariants that outrank convenience, so an
   agent picking this up cold knows what is in flight.
 - Design spec for the Origin parity program

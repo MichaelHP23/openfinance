@@ -11,7 +11,7 @@ than what was kept.
 
 | Phase | What it is | Plan | State |
 |---|---|---|---|
-| **P1** | Categorization engine — rules, system taxonomy, auto-apply, backfill | `docs/superpowers/plans/2026-07-30-p1-categorization.md` | **Planned, not started.** No code written. |
+| **P1** | Categorization engine — rules, system taxonomy, auto-apply, backfill | `docs/superpowers/plans/2026-07-30-p1-categorization.md` | **In progress on branch `p1-categorization`.** Task 1 of 12 done and reviewed clean. |
 | P2 | Budgets — monthly, rollover on read, median suggest | not yet written | Blocked on P1 |
 | P3 | Goals + daily cash-flow forecast + `can_i_afford` | not yet written | Blocked on P2 |
 | P4 | AI advisor v2 — read-only tool calling, visible call trace | not yet written | Blocked on P1–P3 |
@@ -47,9 +47,24 @@ Read these before the first task:
 - `LOCAL_MODE=true` requires `ENVIRONMENT=development`; the app refuses to start
   otherwise, because local mode has no authentication at all.
 
+## The lint gates do not currently pass, and that is not your change
+
+`ruff check app tests` reports **129 errors**; `mypy app` reports **24**. All pre-existing,
+none from P1. They live in `app/services/portfolio.py`, `app/services/trade_import.py`,
+`app/core/scheduler.py`, and `tests/test_trades.py` — mostly `FURB157`
+(`Decimal("1")` → `Decimal(1)`) and a cluster of real `object`-typed arithmetic in
+`portfolio.py` that mypy is right about.
+
+So the working gate is **"no new errors in the files you touched"**, not "clean". Check by
+running the tool before and after your change. 122 of the ruff errors are `--fix`-able in
+one command; the `portfolio.py` mypy cluster is a genuine typing bug worth its own fix.
+The README's claim that these gates pass is stale.
+
 ## Gates
 
 Backend needs Docker running — the test suite spins up a real `postgres:17` container.
+Start Docker Desktop first; without it every backend test fails at container spinup, which
+looks like a code failure and is not.
 
 ```bash
 cd backend
