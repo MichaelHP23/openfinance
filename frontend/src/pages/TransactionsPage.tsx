@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
+import { RulesCard, UncategorizedCard } from "../CategoryCards";
 import { useAccounts } from "../data";
 import { CsvUpload, NewTransactionForm, TransactionList } from "../transactions";
 import { Card, Empty, PageHead } from "../ui/Shell";
@@ -51,6 +52,9 @@ export function TransactionsPage() {
         <h2 className="mb-4 text-sm font-medium">History</h2>
         <TransactionList />
       </Card>
+
+      <UncategorizedCard />
+      <RulesCard />
     </>
   );
 }

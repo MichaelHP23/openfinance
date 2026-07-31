@@ -6,6 +6,7 @@ import { useCategoryMap } from "./categories";
 // Not "./categories" — that bare specifier resolves to categories.ts (Vite prefers
 // .ts over .tsx), so the component lives in its own file. See CategoryPicker.tsx.
 import { CategoryPicker } from "./CategoryPicker";
+import { RulesCard } from "./CategoryCards";
 
 vi.mock("./api/client", () => ({ apiFetch: vi.fn(), API_BASE: "" }));
 import { apiFetch } from "./api/client";
@@ -52,5 +53,41 @@ describe("CategoryPicker", () => {
     await screen.findByRole("option", { name: "Groceries" });
     fireEvent.change(select, { target: { value: "c1" } });
     expect(onChange).toHaveBeenCalledWith("c1");
+  });
+});
+
+describe("RulesCard", () => {
+  it("lists rules in priority order with their category label", async () => {
+    vi.mocked(apiFetch).mockImplementation(async (path: string) => {
+      if (path === "/categories")
+        return [
+          { id: "g1", name: "Food & Drink", parent_id: null, is_system: true },
+          { id: "c1", name: "Groceries", parent_id: "g1", is_system: true },
+        ];
+      if (path === "/category-rules")
+        return [
+          {
+            id: "r1",
+            match_type: "merchant_contains",
+            pattern: "whole foods",
+            category_id: "c1",
+            min_amount: null,
+            max_amount: null,
+            account_id: null,
+            priority: 10,
+            source: "user",
+          },
+        ];
+      return [];
+    });
+    render(<RulesCard />, { wrapper });
+    expect(await screen.findByText("whole foods")).toBeInTheDocument();
+    expect(await screen.findByText("Food & Drink · Groceries")).toBeInTheDocument();
+  });
+
+  it("shows an empty state when there are no rules", async () => {
+    vi.mocked(apiFetch).mockResolvedValue([]);
+    render(<RulesCard />, { wrapper });
+    expect(await screen.findByText(/No rules yet/i)).toBeInTheDocument();
   });
 });
