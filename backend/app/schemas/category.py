@@ -1,18 +1,20 @@
 import uuid
 from decimal import Decimal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.models.category_rule import MatchType, RuleSource
 
 
 class CategoryCreate(BaseModel):
-    name: str
+    model_config = {"str_strip_whitespace": True}
+    name: str = Field(min_length=1, max_length=100)
     parent_id: uuid.UUID | None = None
 
 
 class CategoryUpdate(BaseModel):
-    name: str | None = None
+    model_config = {"str_strip_whitespace": True}
+    name: str | None = Field(default=None, min_length=1, max_length=100)
     parent_id: uuid.UUID | None = None
 
 
