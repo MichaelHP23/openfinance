@@ -31,6 +31,10 @@ export function RulesCard() {
   // ponytail: move-up/move-down buttons rather than drag-and-drop. Ordering a handful
   // of rules is a two-click job; a drag library is a dependency and a touch-target
   // problem. Revisit if someone accumulates enough rules to make this tedious.
+  // move() computes the new order from `rules`, which only reflects the last reorder
+  // once its POST has resolved and invalidated the cache. Two clicks before that lands
+  // would both swap from the same stale order and the first move would be dropped, so
+  // the buttons are disabled (below) for the length of reorder.isPending instead.
   const move = (index: number, delta: number) => {
     const next = [...rules];
     const target = index + delta;
@@ -53,6 +57,9 @@ export function RulesCard() {
           Categorized {backfill.data.changed} transaction
           {backfill.data.changed === 1 ? "" : "s"}.
         </p>
+      )}
+      {backfill.isError && (
+        <p className="mb-3 text-[13px] text-red-400">{(backfill.error as Error).message}</p>
       )}
 
       <form
@@ -87,6 +94,12 @@ export function RulesCard() {
       {create.isError && (
         <p className="mb-3 text-[13px] text-red-400">{(create.error as Error).message}</p>
       )}
+      {remove.isError && (
+        <p className="mb-3 text-[13px] text-red-400">{(remove.error as Error).message}</p>
+      )}
+      {reorder.isError && (
+        <p className="mb-3 text-[13px] text-red-400">{(reorder.error as Error).message}</p>
+      )}
 
       {isLoading ? (
         <Empty>Loading…</Empty>
@@ -102,13 +115,18 @@ export function RulesCard() {
                   {labels.get(r.category_id) ?? "—"}
                 </td>
                 <td className="py-2 text-right text-[13px]">
-                  <button aria-label={`Move ${r.pattern} up`} onClick={() => move(i, -1)}>
+                  <button
+                    aria-label={`Move ${r.pattern} up`}
+                    onClick={() => move(i, -1)}
+                    disabled={reorder.isPending}
+                  >
                     ↑
                   </button>
                   <button
                     aria-label={`Move ${r.pattern} down`}
                     className="ml-2"
                     onClick={() => move(i, 1)}
+                    disabled={reorder.isPending}
                   >
                     ↓
                   </button>
@@ -202,17 +220,33 @@ export function UncategorizedCard() {
           </button>
         </>
       ) : (
-        <table className="w-full">
-          <tbody>
-            {rows.slice(0, 15).map((r) => (
-              <tr key={r.merchant} className="border-b border-line/60 last:border-0">
-                <td className="py-2 text-sm">{r.merchant}</td>
-                <td className="tnum py-2 text-[13px] text-muted">{r.count}×</td>
-                <td className="tnum py-2 text-right text-[13px]">{usd(r.total)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <>
+          <table className="w-full">
+            <tbody>
+              {rows.slice(0, 15).map((r) => (
+                <tr
+                  key={`${r.merchant}:${r.currency}`}
+                  className="border-b border-line/60 last:border-0"
+                >
+                  <td className="py-2 text-sm">{r.merchant}</td>
+                  <td className="tnum py-2 text-[13px] text-muted">{r.count}×</td>
+                  <td className="tnum py-2 text-right text-[13px]">
+                    {/* ponytail: v1 is USD-only except provider syncs, so a non-USD row just
+                        shows the raw amount and its code rather than mis-formatting it as
+                        USD. Upgrade path: a real multi-currency formatter once non-USD
+                        accounts are more than a provider-sync edge case. */}
+                    {r.currency === "USD" ? usd(r.total) : `${r.total} ${r.currency}`}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {rows.length > 15 && (
+            <p className="mt-2 text-[13px] text-muted">
+              +{rows.length - 15} more not shown.
+            </p>
+          )}
+        </>
       )}
     </Card>
   );

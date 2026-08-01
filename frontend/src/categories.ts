@@ -22,7 +22,7 @@ export type Rule = {
   source: "user" | "suggested";
 };
 
-export type Uncategorized = { merchant: string; count: number; total: string };
+export type Uncategorized = { merchant: string; count: number; total: string; currency: string };
 export type Suggestion = { merchant: string; category_id: string; category_name: string };
 
 export function useCategories() {

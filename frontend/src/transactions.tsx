@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { API_BASE, apiFetch } from "./api/client";
@@ -24,6 +24,17 @@ function TxnRow({ txn, index }: { txn: Txn; index: number }) {
   const qc = useQueryClient();
   const createRule = useCreateRule();
   const [askAbout, setAskAbout] = useState<string | null>(null);
+  // Undefined = defer to server data. Set on change and held until `txn.category_id`
+  // itself catches up: invalidating the transactions query on success kicks off a
+  // refetch that hasn't landed yet, so clearing this the moment the PATCH resolves
+  // would just trade the in-flight snap-back for a post-success one.
+  const [pendingCategory, setPendingCategory] = useState<string | null | undefined>(undefined);
+
+  useEffect(() => {
+    if (pendingCategory !== undefined && txn.category_id === pendingCategory) {
+      setPendingCategory(undefined);
+    }
+  }, [txn.category_id, pendingCategory]);
 
   const setCategory = useMutation({
     mutationFn: (categoryId: string | null) =>
@@ -38,6 +49,7 @@ function TxnRow({ txn, index }: { txn: Txn; index: number }) {
       // and a rule the user didn't ask for is a rule they have to find and delete.
       if (categoryId) setAskAbout(categoryId);
     },
+    onError: () => setPendingCategory(undefined),
   });
 
   return (
@@ -50,10 +62,18 @@ function TxnRow({ txn, index }: { txn: Txn; index: number }) {
         <td className="py-3 text-sm">{txn.merchant_raw}</td>
         <td className="py-3">
           <CategoryPicker
-            value={txn.category_id}
-            onChange={(id) => setCategory.mutate(id)}
+            value={pendingCategory !== undefined ? pendingCategory : txn.category_id}
+            onChange={(id) => {
+              setPendingCategory(id);
+              setCategory.mutate(id);
+            }}
             ariaLabel={`Category for ${txn.merchant_raw}`}
           />
+          {setCategory.isError && (
+            <p className="mt-1 text-[13px] text-clay">
+              {(setCategory.error as Error).message}
+            </p>
+          )}
         </td>
         <td
           className={`tnum py-3 text-right text-sm ${
@@ -70,8 +90,10 @@ function TxnRow({ txn, index }: { txn: Txn; index: number }) {
             <button
               className="text-acid"
               onClick={() => {
-                createRule.mutate({ pattern: txn.merchant_raw, category_id: askAbout });
-                setAskAbout(null);
+                createRule.mutate(
+                  { pattern: txn.merchant_raw, category_id: askAbout },
+                  { onSuccess: () => setAskAbout(null) },
+                );
               }}
             >
               Make it a rule
@@ -79,6 +101,9 @@ function TxnRow({ txn, index }: { txn: Txn; index: number }) {
             <button className="ml-2" onClick={() => setAskAbout(null)}>
               No
             </button>
+            {createRule.isError && (
+              <p className="mt-1 text-clay">{(createRule.error as Error).message}</p>
+            )}
           </td>
         </tr>
       )}
