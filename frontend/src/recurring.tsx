@@ -38,6 +38,7 @@ export type Charge = {
   posted_at: string;
   amount: string;
   account_id: string | null;
+  category_id: string | null;
 };
 
 export type SeriesDetail = Series & { charges: Charge[] };
@@ -337,6 +338,7 @@ function SeriesBody({ series: s }: { series: Series }) {
                 merchant_raw: s.label,
                 amount: c.amount,
                 currency: "USD",
+                category_id: c.category_id,
               }))}
             />
           </div>

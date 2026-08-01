@@ -37,6 +37,10 @@ class ChargeOut(BaseModel):
     posted_at: datetime
     amount: Decimal
     account_id: uuid.UUID
+    # A charge IS a transaction, and the series view renders it with the same row the
+    # ledger uses — which now carries a category picker. Without this it always reads
+    # "Uncategorized", whatever the row actually is.
+    category_id: uuid.UUID | None = None
     model_config = {"from_attributes": True}
 
 

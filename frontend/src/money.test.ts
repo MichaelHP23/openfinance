@@ -16,6 +16,7 @@ const txn = (posted_at: string, amount: string, merchant_raw = "X"): Txn => ({
   posted_at,
   amount,
   merchant_raw,
+  category_id: null,
   currency: "USD",
 });
 
