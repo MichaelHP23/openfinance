@@ -281,3 +281,62 @@ def test_suggest_survives_a_model_that_does_not_answer_in_json(
     res = client.post("/categories/suggest")
     assert res.status_code == 200
     assert res.json()["suggestions"] == []
+
+
+def test_deleting_a_category_a_rule_points_at_is_refused(client, db):
+    # The FK cascades, so without a guard the rule would vanish silently and the
+    # household would only notice when matching quietly stopped working.
+    ensure_system_categories(db)
+    created = client.post("/categories", json={"name": "Boat Fuel"}).json()
+    client.post(
+        "/category-rules", json={"pattern": "marina", "category_id": created["id"]}
+    )
+    assert client.delete(f"/categories/{created['id']}").status_code == 409
+    assert len(client.get("/category-rules").json()) == 1
+
+
+def test_a_transaction_cannot_be_filed_under_an_unknown_category(client, db, account):
+    ensure_system_categories(db)
+    res = client.post(
+        "/transactions",
+        json={
+            "account_id": str(account.id),
+            "posted_at": "2026-07-01T00:00:00Z",
+            "amount": "-42.00",
+            "currency": "USD",
+            "merchant_raw": "WHOLE FOODS",
+            "category_id": str(uuid.uuid4()),
+        },
+    )
+    assert res.status_code == 422
+
+
+def test_a_transaction_cannot_be_moved_into_an_unknown_category(client, db, account):
+    ensure_system_categories(db)
+    created = client.post(
+        "/transactions",
+        json={
+            "account_id": str(account.id),
+            "posted_at": "2026-07-01T00:00:00Z",
+            "amount": "-42.00",
+            "currency": "USD",
+            "merchant_raw": "WHOLE FOODS",
+        },
+    ).json()
+    res = client.patch(
+        f"/transactions/{created['id']}", json={"category_id": str(uuid.uuid4())}
+    )
+    assert res.status_code == 422
+
+
+def test_suggest_survives_json_too_deeply_nested_to_parse(
+    client, db, household, account, monkeypatch
+):
+    # Deep nesting raises RecursionError, not JSONDecodeError — a different except clause.
+    ensure_system_categories(db)
+    db.add(_txn(household, account, "WHOLE FOODS"))
+    db.commit()
+    _fake_llm(monkeypatch, "[" * 5000 + "]" * 5000)
+    res = client.post("/categories/suggest")
+    assert res.status_code == 200
+    assert res.json()["suggestions"] == []

@@ -363,3 +363,62 @@ def test_a_category_typed_in_by_hand_beats_the_rules(db):
         ),
     )
     assert txn.category_id == COFFEE
+
+
+def test_a_regex_that_backtracks_forever_is_rejected():
+    # "(a+)+b" against thirty a's never returns. `re` has no step budget and this runs
+    # inline on every arriving transaction, so the rule must not be storable at all.
+    for pattern in ("(a+)+b", "(ab*){2,}", "(x+)*y"):
+        try:
+            compile_pattern(MatchType.merchant_regex, pattern)
+        except BadPattern:
+            pass
+        else:
+            raise AssertionError(f"expected BadPattern for {pattern}")
+
+
+def test_ordinary_regexes_still_pass():
+    compile_pattern(MatchType.merchant_regex, r"^(whole foods|trader joe)")
+    compile_pattern(MatchType.merchant_regex, r"^whole ?foods.*")
+
+
+def test_a_merchant_that_normalizes_to_nothing_still_shows_as_uncategorized(db):
+    # merchant_key("123456") is "". Dropping the row would hide it from the only screen
+    # that tells the household what is unsorted.
+    household, account = _household_and_account(db)
+    db.add(
+        Transaction(
+            household_id=household.id,
+            account_id=account.id,
+            posted_at=datetime(2026, 7, 1, tzinfo=UTC),
+            amount=Decimal("-42.00"),
+            currency="USD",
+            merchant_raw="123456",
+        )
+    )
+    db.commit()
+
+    rows = categorization.uncategorized_merchants(db, household.id)
+    assert [r.merchant for r in rows] == ["123456"]
+
+
+def test_the_rollup_does_not_add_euros_to_dollars(db):
+    household, account = _household_and_account(db)
+    for currency in ("USD", "EUR"):
+        db.add(
+            Transaction(
+                household_id=household.id,
+                account_id=account.id,
+                posted_at=datetime(2026, 7, 1, tzinfo=UTC),
+                amount=Decimal("-100.00"),
+                currency=currency,
+                merchant_raw="SHELL OIL",
+            )
+        )
+    db.commit()
+
+    rows = categorization.uncategorized_merchants(db, household.id)
+    assert {(r.currency, r.total) for r in rows} == {
+        ("USD", Decimal("-100.00")),
+        ("EUR", Decimal("-100.00")),
+    }

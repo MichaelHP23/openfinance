@@ -15,6 +15,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models.category import Category
+from app.models.category_rule import CategoryRule
 from app.models.transaction import Transaction
 from app.schemas.category import CategoryCreate, CategoryUpdate
 
@@ -172,6 +173,12 @@ def delete(db: Session, household_id: uuid.UUID, category_id: uuid.UUID) -> bool
         select(Transaction.id).where(Transaction.category_id == category_id).limit(1)
     ):
         raise CategoryInUse("category is still assigned to transactions")
+    # CategoryRule.category_id is ON DELETE CASCADE, so without this the rule disappears
+    # with the category and the household is never told why matching stopped working.
+    if db.scalar(
+        select(CategoryRule.id).where(CategoryRule.category_id == category_id).limit(1)
+    ):
+        raise CategoryInUse("a rule still points at this category")
     db.delete(row)
     db.commit()
     return True

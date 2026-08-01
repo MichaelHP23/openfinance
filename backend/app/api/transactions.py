@@ -21,6 +21,8 @@ def create_txn(
         return transactions.create(db, hid, body)
     except transactions.AccountNotInHousehold:
         raise HTTPException(status_code=404, detail="Account not found")
+    except transactions.CategoryNotInHousehold as exc:
+        raise HTTPException(status_code=422, detail="Category not found") from exc
 
 
 @router.get("", response_model=list[TxnOut])
@@ -44,7 +46,10 @@ def update_txn(
     hid: uuid.UUID = Depends(require_household),
     db: Session = Depends(get_db),
 ) -> Transaction:
-    txn = transactions.update(db, hid, txn_id, body)
+    try:
+        txn = transactions.update(db, hid, txn_id, body)
+    except transactions.CategoryNotInHousehold as exc:
+        raise HTTPException(status_code=422, detail="Category not found") from exc
     if not txn:
         raise HTTPException(status_code=404, detail="Transaction not found")
     return txn

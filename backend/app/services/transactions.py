@@ -6,10 +6,14 @@ from sqlalchemy.orm import Session
 
 from app.models.transaction import Transaction
 from app.schemas.transaction import TxnCreate, TxnUpdate
-from app.services import accounts, categorization
+from app.services import accounts, categories, categorization
 
 
 class AccountNotInHousehold(Exception):
+    pass
+
+
+class CategoryNotInHousehold(Exception):
     pass
 
 
@@ -18,8 +22,19 @@ def _assert_account(db: Session, household_id: uuid.UUID, account_id: uuid.UUID)
         raise AccountNotInHousehold(str(account_id))
 
 
+def _assert_category(
+    db: Session, household_id: uuid.UUID, category_id: uuid.UUID | None
+) -> None:
+    """Same check the categories and rules services make. Without it a hand-written
+    category_id either reaches the FK as a 500 or quietly parents the row to another
+    household's private category."""
+    if category_id is not None and categories.get(db, household_id, category_id) is None:
+        raise CategoryNotInHousehold(str(category_id))
+
+
 def create(db: Session, household_id: uuid.UUID, data: TxnCreate) -> Transaction:
     _assert_account(db, household_id, data.account_id)
+    _assert_category(db, household_id, data.category_id)
     txn = Transaction(
         household_id=household_id,
         account_id=data.account_id,
@@ -74,7 +89,10 @@ def update(
     txn = get(db, household_id, txn_id)
     if not txn:
         return None
-    for field, value in data.model_dump(exclude_unset=True).items():
+    fields = data.model_dump(exclude_unset=True)
+    if "category_id" in fields:
+        _assert_category(db, household_id, fields["category_id"])
+    for field, value in fields.items():
         setattr(txn, field, value)
     db.commit()
     db.refresh(txn)

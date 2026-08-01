@@ -37,6 +37,15 @@ from app.services.recurring import merchant_key
 # anyway, since the only writer is the household itself.
 PATTERN_MAX = 200
 
+# A quantified group that itself contains a quantifier — "(a+)+", "(ab*){2,}" — is the
+# classic exponential-backtracking shape. Python's `re` has no step budget and rules run
+# synchronously on every arriving transaction, so one of these pins a worker forever on a
+# merchant name of thirty letters.
+# ponytail: a substring check, not a parser. It misses shapes that nest through a second
+# group level, e.g. "((a+))+". Swap in the `regex` module's `timeout=` if rules ever
+# accept patterns from anyone but the household itself.
+_NESTED_QUANTIFIER = re.compile(r"\([^()]*[*+}][^()]*\)\s*[*+{]")
+
 
 class BadPattern(Exception):
     """A rule pattern that cannot be stored: empty, too long, or an invalid regex."""
@@ -53,6 +62,11 @@ def compile_pattern(match_type: MatchType, pattern: str) -> None:
             re.compile(pattern)
         except re.error as exc:
             raise BadPattern(f"Invalid regular expression: {exc}") from exc
+        if _NESTED_QUANTIFIER.search(pattern):
+            raise BadPattern(
+                "Nested repeats like (a+)+ can take forever to match. "
+                "Rewrite the pattern without a repeat inside a repeated group."
+            )
     elif not merchant_key(pattern):
         # "#1234" normalizes to "" and `"" in name` is always True -> silent catch-all.
         raise BadPattern("Pattern has no letters or digits to match on")
@@ -156,14 +170,20 @@ class UncategorizedMerchant:
     merchant: str
     count: int
     total: Decimal
+    currency: str
 
 
 def uncategorized_merchants(
     db: Session, household_id: uuid.UUID, limit: int = 100
 ) -> list[UncategorizedMerchant]:
-    """Roll uncategorized household transactions up by normalized merchant."""
-    counts: dict[str, int] = defaultdict(int)
-    totals: dict[str, Decimal] = defaultdict(Decimal)
+    """Roll uncategorized household transactions up by normalized merchant.
+
+    Grouped by currency as well as merchant. `accounts.create` only accepts USD, but a
+    provider sync writes whatever currency the bank reports, so a single key would add
+    euros to dollars and show the household one meaningless total.
+    """
+    counts: dict[tuple[str, str], int] = defaultdict(int)
+    totals: dict[tuple[str, str], Decimal] = defaultdict(Decimal)
     rows = db.scalars(
         select(Transaction).where(
             Transaction.household_id == household_id,
@@ -171,17 +191,22 @@ def uncategorized_merchants(
         )
     )
     for txn in rows:
-        merchant = _merchant_of(txn)
-        if not merchant:
-            continue
-        counts[merchant] += 1
-        totals[merchant] += txn.amount
+        # A name that survives normalization as nothing — "123456", or a name in a script
+        # merchant_key strips entirely — still has to be visible here. This is the only
+        # screen that tells a household what is unsorted; a row that never appears is a
+        # row they can never fix.
+        merchant = _merchant_of(txn) or (txn.merchant_raw or "").strip() or "(no merchant)"
+        key = (merchant, txn.currency)
+        counts[key] += 1
+        totals[key] += txn.amount
 
     result = [
-        UncategorizedMerchant(merchant=merchant, count=counts[merchant], total=totals[merchant])
-        for merchant in counts
+        UncategorizedMerchant(
+            merchant=name, count=counts[(name, ccy)], total=totals[(name, ccy)], currency=ccy
+        )
+        for name, ccy in counts
     ]
-    result.sort(key=lambda item: (-item.count, item.merchant))
+    result.sort(key=lambda item: (-item.count, item.merchant, item.currency))
     return result[:limit]
 
 
@@ -325,7 +350,9 @@ def suggest_rules(
 
     try:
         parsed = json.loads(raw)
-    except json.JSONDecodeError:
+    except (json.JSONDecodeError, RecursionError):
+        # Deeply nested JSON blows the stack rather than failing to parse, and the reply
+        # comes from a model that may be having a bad day. Either way: no suggestions.
         return [], model
 
     # Every proposal is checked against the taxonomy and against the merchants we actually

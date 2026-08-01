@@ -46,9 +46,12 @@ def _seed(db, hid):
     accounts_service.create(
         db, hid, AccountCreate(type="credit_card", name="Card", balance=Decimal(500))
     )
-    now = datetime.now(UTC)
+    # Anchored mid-month: 30-day steps from an arbitrary "now" can land twice in the same
+    # calendar month (from Aug 1: Jul 31, Jul 1, Jun 1), and the assertions below count
+    # distinct months. From day 15, a 31-day step always lands in the month before.
+    now = datetime.now(UTC).replace(day=15)
     for month in range(3):
-        posted = now - timedelta(days=30 * month + 1)
+        posted = now - timedelta(days=31 * month)
         txn_service.create(
             db,
             hid,

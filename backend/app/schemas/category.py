@@ -73,6 +73,7 @@ class UncategorizedOut(BaseModel):
     merchant: str
     count: int
     total: Decimal
+    currency: str
 
 
 class SuggestionOut(BaseModel):

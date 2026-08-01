@@ -106,7 +106,9 @@ def list_uncategorized(
     hid: uuid.UUID = Depends(require_household), db: Session = Depends(get_db)
 ) -> list[UncategorizedOut]:
     return [
-        UncategorizedOut(merchant=m.merchant, count=m.count, total=m.total)
+        UncategorizedOut(
+            merchant=m.merchant, count=m.count, total=m.total, currency=m.currency
+        )
         for m in categorization.uncategorized_merchants(db, hid)
     ]
 
