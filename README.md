@@ -70,6 +70,12 @@ npm run lint
   from a bank sync. Rules match on merchant, amount, and account; the first one in the
   list wins, and you can reorder them. Nothing is a black box: every category on a
   transaction traces to a rule you can open.
+- **Budgets** — a monthly amount per category, with actual spend, remaining, and a pace
+  indicator (spend-fraction vs. calendar-fraction) computed live, never guessed. Turning
+  on rollover folds last month's unspent amount into this one; the carry is recomputed
+  from history every time it's shown and nothing is ever written for it, so switching
+  rollover off can't corrupt a number you already saved. Suggest fills in a trailing
+  3-month median, rounded to the nearest 5 — no model involved.
 - Local mode (no login) or full email/password auth: argon2id, server-side sessions,
   rate limits.
 - `BankProvider` protocol with a `ManualProvider`; credentials sealed with AES-GCM
@@ -151,7 +157,7 @@ so a day that isn't recorded is lost. Set the interval to `0` to disable.
 
 ## Not here yet
 
-- Budgets, reports. See the roadmap in `docs/superpowers/specs/2026-07-30-origin-parity-design.md`.
+- Reports. See the roadmap in `docs/superpowers/specs/2026-07-30-origin-parity-design.md`.
 - Scheduled background syncing — for now, syncing is a button.
 - Editing or deleting an account from the UI.
 

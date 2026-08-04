@@ -50,6 +50,31 @@ P1 (categorization) is complete on the `p1-categorization` branch. Nothing has m
 - Implementation plan for P1, categorization
   (`docs/superpowers/plans/2026-07-30-p1-categorization.md`).
 
+P2 (budgets) is complete on the `p2-budgets` branch, building on P1's categories.
+
+### Added — P2
+- `budgets` table: one row per household, category, and month, `UNIQUE (household_id,
+  category_id, month)` so the date column is the whole period and a write is always an
+  upsert.
+- `services/budgets.py`: `status` (budgeted, actual, remaining, pace) over every leaf
+  category whether budgeted or not; `rollover_carry`, computed fresh from stored amounts
+  and actual spend on every read and never written, so toggling rollover off cannot
+  corrupt a saved number; `suggest`, a trailing-3-month median rounded to the nearest 5,
+  skipping months with no data for a category rather than treating them as zero;
+  `copy_from`, an idempotent month-to-month copy.
+- `GET/PUT /budgets/{month}`, `POST /budgets/{month}/suggest`,
+  `POST /budgets/{month}/copy`. A budget's `category_id` is checked against the
+  household before it is written — an unknown or foreign id is 422, never a 500.
+  Deleting a category a budget still points at is refused with 409, the same treatment
+  P1 already gives a category a rule or transaction still points at.
+- Frontend: a Budgets page with a month switcher, per-category rows showing a pace bar
+  that ambers when spending is outrunning the calendar, a rollover checkbox per row, and
+  Suggest / Copy last month actions.
+- Navigation: the mobile tab bar drops from five fixed tabs to three (Overview,
+  Accounts, Activity) plus a `ui/MoreMenu.tsx` sheet holding Investments, Recurring, and
+  the new Budgets page — keyboard reachable, `aria-expanded` on the trigger, closes on
+  route change and on Escape. Desktop's sidebar is unchanged, listing everything.
+
 ## [Unreleased] — M0 Foundation
 
 ### Added
