@@ -6,14 +6,17 @@ there is no period-type or period-length concept anywhere in this module.
 """
 
 import uuid
+from calendar import monthrange
 from dataclasses import dataclass
-from datetime import date
+from datetime import UTC, date, datetime
 from decimal import Decimal
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.models.budget import Budget
+from app.models.category import Category
+from app.models.transaction import Transaction
 from app.services import categories
 
 
@@ -112,4 +115,115 @@ def upsert(
     db.commit()
     for row in out:
         db.refresh(row)
+    return out
+
+
+def _leaf_categories(db: Session, household_id: uuid.UUID) -> list[Category]:
+    """Categories nothing else is a child of — a real leaf, or a childless top-level
+    custom category. `CategoryPicker` on the frontend only ever offers one of these as a
+    selectable value (a group with leaves renders as an <optgroup> label, never an
+    option), so these are the only categories a transaction can actually land in. A
+    parent group would always show a zero row here and add nothing but clutter.
+
+    ponytail: if a transaction is ever filed directly under a group id through some path
+    other than the picker, its spend will not appear in `status`. Nothing in this app
+    currently writes a group id onto a transaction; revisit if that changes.
+    """
+    all_cats = categories.list_for(db, household_id)
+    parents = {c.parent_id for c in all_cats if c.parent_id is not None}
+    return [c for c in all_cats if c.id not in parents]
+
+
+def _actuals_for_month(
+    db: Session, household_id: uuid.UUID, month: date
+) -> dict[uuid.UUID, Decimal]:
+    """Spend per category for the month, sign-flipped: transactions store outflow as a
+    negative amount, but a budget is stated as the positive number a person budgets, so
+    a $30 grocery run should read as actual=30.00, not -30.00."""
+    start, end = month, _next_month(month)
+    rows = db.execute(
+        select(Transaction.category_id, func.sum(Transaction.amount))
+        .where(
+            Transaction.household_id == household_id,
+            Transaction.category_id.is_not(None),
+            Transaction.posted_at >= start,
+            Transaction.posted_at < end,
+        )
+        .group_by(Transaction.category_id)
+    )
+    return {cat_id: -total for cat_id, total in rows}
+
+
+def _elapsed_fraction(month: date, today: date) -> float:
+    """How far through `month` `today` is, as a fraction in [0, 1]. A month entirely in
+    the past reads 1.0; one that has not started yet reads 0.0 — both avoid a pace
+    computation that would otherwise divide by a fraction of zero or overshoot 1."""
+    if today < month:
+        return 0.0
+    if today >= _next_month(month):
+        return 1.0
+    days_in_month = monthrange(month.year, month.month)[1]
+    elapsed_days = min((today - month).days + 1, days_in_month)
+    return elapsed_days / days_in_month
+
+
+@dataclass
+class CategoryBudgetStatus:
+    category_id: uuid.UUID
+    category_name: str
+    budgeted: Decimal
+    carry_in: Decimal
+    effective_budget: Decimal
+    actual: Decimal
+    remaining: Decimal
+    pace: float | None
+    rollover: bool
+
+
+def status(
+    db: Session, household_id: uuid.UUID, month: date, *, today: date | None = None
+) -> list[CategoryBudgetStatus]:
+    """Budgeted, actual, remaining, and pace for every leaf category — budgeted or not,
+    so an unbudgeted category with real spend still shows up.
+
+    Pace is (fraction of the effective budget spent) / (fraction of the month elapsed):
+    above 1 means spending is outrunning the calendar, below 1 means it is on track or
+    under. It is a ratio, not an amount of money, so unlike every other field on this
+    dataclass it is a plain `float` — do not change it to `Decimal`.
+
+    `carry_in` is always zero here; Task 4 wires in the real rollover computation
+    without changing this function's shape.
+    """
+    month = _first_of_month(month)
+    today = today or datetime.now(tz=UTC).date()
+    cats = _leaf_categories(db, household_id)
+    budgets_by_cat = {b.category_id: b for b in list_budgets(db, household_id, month)}
+    actuals = _actuals_for_month(db, household_id, month)
+    elapsed = _elapsed_fraction(month, today)
+
+    out = []
+    for cat in cats:
+        row = budgets_by_cat.get(cat.id)
+        budgeted = row.amount if row else Decimal(0)
+        rollover = row.rollover if row else False
+        carry_in = Decimal(0)
+        effective = budgeted + carry_in
+        actual = actuals.get(cat.id, Decimal(0))
+        remaining = effective - actual
+        pace = None
+        if effective > 0 and elapsed > 0:
+            pace = (float(actual) / float(effective)) / elapsed
+        out.append(
+            CategoryBudgetStatus(
+                category_id=cat.id,
+                category_name=cat.name,
+                budgeted=budgeted,
+                carry_in=carry_in,
+                effective_budget=effective,
+                actual=actual,
+                remaining=remaining,
+                pace=pace,
+                rollover=rollover,
+            )
+        )
     return out
