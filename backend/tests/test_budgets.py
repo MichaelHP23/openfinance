@@ -1,5 +1,5 @@
 import uuid
-from datetime import date
+from datetime import UTC, date, datetime
 from decimal import Decimal
 
 import pytest
@@ -7,6 +7,8 @@ import pytest
 from app.models.account import Account, AccountType
 from app.models.budget import Budget
 from app.models.household import Household
+from app.models.transaction import Transaction
+from app.services import budgets
 from app.services.categories import ensure_system_categories, system_category_id
 
 GROCERIES = system_category_id("Food & Drink/Groceries")
@@ -82,9 +84,6 @@ def test_a_different_household_can_budget_the_same_category_and_month(db):
     db.add(Budget(household_id=h1.id, category_id=GROCERIES, month=date(2026, 7, 1), amount=Decimal("1.00")))
     db.add(Budget(household_id=h2.id, category_id=GROCERIES, month=date(2026, 7, 1), amount=Decimal("1.00")))
     db.commit()  # must not raise: the unique constraint is scoped per household
-
-
-from app.services import budgets
 
 
 def test_parse_month_reads_year_dash_month():
@@ -171,11 +170,6 @@ def test_upsert_rejects_another_households_custom_category(db, household):
         )
 
 
-from datetime import UTC, datetime
-
-from app.models.transaction import Transaction
-
-
 def _spend(db, household, account, category_id, month: date, amount: str, day: int = 15):
     db.add(
         Transaction(
@@ -238,6 +232,52 @@ def test_spend_outside_the_month_does_not_count(db, household, account):
     rows = budgets.status(db, household.id, date(2026, 7, 1), today=date(2026, 7, 15))
     groceries = next(r for r in rows if r.category_id == GROCERIES)
     assert groceries.actual == Decimal("0")
+
+
+def test_month_boundaries_are_built_in_utc_not_a_bare_date(db, household, account):
+    """The regression this guards: a bare `date` used as a query bound gets coerced to
+    timestamptz at midnight in the session's TimeZone, not UTC, which would silently
+    shift transactions near a month boundary into the wrong month on a non-UTC server.
+    Building the boundary as an explicit UTC datetime instead means the last instant of
+    June is still June and the first instant of July is already July, regardless of the
+    session's TimeZone setting."""
+    ensure_system_categories(db)
+    db.add(
+        Transaction(
+            household_id=household.id,
+            account_id=account.id,
+            posted_at=datetime(2026, 6, 30, 23, 59, 59, tzinfo=UTC),
+            amount=Decimal("-10.00"),
+            currency="USD",
+            merchant_raw="Last Instant Of June",
+            category_id=GROCERIES,
+        )
+    )
+    db.add(
+        Transaction(
+            household_id=household.id,
+            account_id=account.id,
+            posted_at=datetime(2026, 7, 1, 0, 0, 0, tzinfo=UTC),
+            amount=Decimal("-20.00"),
+            currency="USD",
+            merchant_raw="First Instant Of July",
+            category_id=GROCERIES,
+        )
+    )
+    db.commit()
+
+    june = next(
+        r
+        for r in budgets.status(db, household.id, date(2026, 6, 1), today=date(2026, 6, 30))
+        if r.category_id == GROCERIES
+    )
+    july = next(
+        r
+        for r in budgets.status(db, household.id, date(2026, 7, 1), today=date(2026, 7, 1))
+        if r.category_id == GROCERIES
+    )
+    assert june.actual == Decimal("10.00")
+    assert july.actual == Decimal("20.00")
 
 
 def test_pace_on_the_first_day_of_a_31_day_month(db, household, account):

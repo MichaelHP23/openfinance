@@ -141,7 +141,14 @@ def _actuals_for_month(
     """Spend per category for the month, sign-flipped: transactions store outflow as a
     negative amount, but a budget is stated as the positive number a person budgets, so
     a $30 grocery run should read as actual=30.00, not -30.00."""
-    start, end = month, _next_month(month)
+    # posted_at is TIMESTAMP WITH TIME ZONE; a bare `date` gets coerced to timestamptz
+    # at midnight in the session's TimeZone setting, not UTC, which would attribute
+    # boundary transactions to the wrong month whenever the DB's TimeZone isn't UTC.
+    # Every other range query in this codebase (digest.py, recurring.py, investments.py)
+    # passes a tz-aware datetime for the same reason.
+    start = datetime(month.year, month.month, 1, tzinfo=UTC)
+    next_month = _next_month(month)
+    end = datetime(next_month.year, next_month.month, 1, tzinfo=UTC)
     rows = db.execute(
         select(Transaction.category_id, func.sum(Transaction.amount))
         .where(
@@ -188,6 +195,14 @@ class CategoryBudgetStatus:
 _MAX_ROLLOVER_LOOKBACK = 24
 
 
+# Keyed by month -> {category_id: actual}, one entry per distinct month touched while
+# walking a rollover chain. Without this, `rollover_carry` re-runs a full household-wide
+# GROUP BY aggregate for every (category, month) pair in the chain even though only the
+# distinct months matter — C rollover categories over a D-month chain would otherwise
+# cost C×D queries for D actually-distinct months.
+_ActualsMemo = dict[date, dict[uuid.UUID, Decimal]]
+
+
 def _carry_into(
     db: Session,
     household_id: uuid.UUID,
@@ -195,6 +210,7 @@ def _carry_into(
     month: date,
     *,
     _depth: int = 0,
+    _actuals_memo: _ActualsMemo,
 ) -> Decimal:
     """Unspent *effective* budget from the month before `month`, if `month`'s own row
     opted in. Recomputed from history every call, never stored — see `rollover_carry`."""
@@ -208,29 +224,52 @@ def _carry_into(
     if prior is None:
         return Decimal(0)
     prior_carry = _carry_into(
-        db, household_id, category_id, prior_month, _depth=_depth + 1
+        db,
+        household_id,
+        category_id,
+        prior_month,
+        _depth=_depth + 1,
+        _actuals_memo=_actuals_memo,
     )
-    prior_actual = _actual_for(db, household_id, category_id, prior_month)
+    prior_actual = _actual_for(db, household_id, category_id, prior_month, _actuals_memo)
     return prior.amount + prior_carry - prior_actual
 
 
 def _actual_for(
-    db: Session, household_id: uuid.UUID, category_id: uuid.UUID, month: date
+    db: Session,
+    household_id: uuid.UUID,
+    category_id: uuid.UUID,
+    month: date,
+    _actuals_memo: _ActualsMemo,
 ) -> Decimal:
-    return _actuals_for_month(db, household_id, month).get(category_id, Decimal(0))
+    if month not in _actuals_memo:
+        _actuals_memo[month] = _actuals_for_month(db, household_id, month)
+    return _actuals_memo[month].get(category_id, Decimal(0))
 
 
 def rollover_carry(
-    db: Session, household_id: uuid.UUID, month: date
+    db: Session,
+    household_id: uuid.UUID,
+    month: date,
+    *,
+    budget_rows: list[Budget] | None = None,
 ) -> dict[uuid.UUID, Decimal]:
     """Carry-in for every rollover=true row in `month`. Read-only: nothing here writes
     a row. A household that never checks the rollover box gets an empty dict back, and
-    every number `status` shows it is exactly what was typed into `amount`."""
+    every number `status` shows it is exactly what was typed into `amount`.
+
+    `budget_rows` lets a caller that already fetched `month`'s budgets (e.g. `status`)
+    pass them straight in instead of paying for the same `list_budgets` query twice.
+    """
     month = _first_of_month(month)
+    rows = budget_rows if budget_rows is not None else list_budgets(db, household_id, month)
     out: dict[uuid.UUID, Decimal] = {}
-    for row in list_budgets(db, household_id, month):
+    actuals_memo: _ActualsMemo = {}
+    for row in rows:
         if row.rollover:
-            out[row.category_id] = _carry_into(db, household_id, row.category_id, month)
+            out[row.category_id] = _carry_into(
+                db, household_id, row.category_id, month, _actuals_memo=actuals_memo
+            )
     return out
 
 
@@ -251,9 +290,10 @@ def status(
     month = _first_of_month(month)
     today = today or datetime.now(tz=UTC).date()
     cats = _leaf_categories(db, household_id)
-    budgets_by_cat = {b.category_id: b for b in list_budgets(db, household_id, month)}
+    budget_rows = list_budgets(db, household_id, month)
+    budgets_by_cat = {b.category_id: b for b in budget_rows}
     actuals = _actuals_for_month(db, household_id, month)
-    carries = rollover_carry(db, household_id, month)
+    carries = rollover_carry(db, household_id, month, budget_rows=budget_rows)
     elapsed = _elapsed_fraction(month, today)
 
     out = []

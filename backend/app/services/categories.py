@@ -180,7 +180,7 @@ def delete(db: Session, household_id: uuid.UUID, category_id: uuid.UUID) -> bool
         select(CategoryRule.id).where(CategoryRule.category_id == category_id).limit(1)
     ):
         raise CategoryInUse("a rule still points at this category")
-    # CategoryRule.category_id is ON DELETE CASCADE at the schema level; without this
+    # Budget.category_id is ON DELETE CASCADE at the schema level; without this
     # check a budgeted category would delete cleanly and the budget row would simply be
     # gone, with nothing telling the household why the Budgets page changed under them.
     if db.scalar(select(Budget.id).where(Budget.category_id == category_id).limit(1)):
