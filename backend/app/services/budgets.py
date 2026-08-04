@@ -180,6 +180,59 @@ class CategoryBudgetStatus:
     rollover: bool
 
 
+# A chain of rollover=true rows could in principle walk back through a household's
+# entire budget history. Twenty-four months is far past any budget anyone keeps rolling
+# over on purpose, and an unbounded backward walk against arbitrary history is exactly
+# the kind of unbounded work PLAN-CONSTRAINTS.md keeps out of a request handler.
+_MAX_ROLLOVER_LOOKBACK = 24
+
+
+def _carry_into(
+    db: Session,
+    household_id: uuid.UUID,
+    category_id: uuid.UUID,
+    month: date,
+    *,
+    _depth: int = 0,
+) -> Decimal:
+    """Unspent *effective* budget from the month before `month`, if `month`'s own row
+    opted in. Recomputed from history every call, never stored — see `rollover_carry`."""
+    if _depth >= _MAX_ROLLOVER_LOOKBACK:
+        return Decimal(0)
+    row = _get_budget(db, household_id, category_id, month)
+    if row is None or not row.rollover:
+        return Decimal(0)
+    prior_month = _prior_month(month)
+    prior = _get_budget(db, household_id, category_id, prior_month)
+    if prior is None:
+        return Decimal(0)
+    prior_carry = _carry_into(
+        db, household_id, category_id, prior_month, _depth=_depth + 1
+    )
+    prior_actual = _actual_for(db, household_id, category_id, prior_month)
+    return prior.amount + prior_carry - prior_actual
+
+
+def _actual_for(
+    db: Session, household_id: uuid.UUID, category_id: uuid.UUID, month: date
+) -> Decimal:
+    return _actuals_for_month(db, household_id, month).get(category_id, Decimal(0))
+
+
+def rollover_carry(
+    db: Session, household_id: uuid.UUID, month: date
+) -> dict[uuid.UUID, Decimal]:
+    """Carry-in for every rollover=true row in `month`. Read-only: nothing here writes
+    a row. A household that never checks the rollover box gets an empty dict back, and
+    every number `status` shows it is exactly what was typed into `amount`."""
+    month = _first_of_month(month)
+    out: dict[uuid.UUID, Decimal] = {}
+    for row in list_budgets(db, household_id, month):
+        if row.rollover:
+            out[row.category_id] = _carry_into(db, household_id, row.category_id, month)
+    return out
+
+
 def status(
     db: Session, household_id: uuid.UUID, month: date, *, today: date | None = None
 ) -> list[CategoryBudgetStatus]:
@@ -199,6 +252,7 @@ def status(
     cats = _leaf_categories(db, household_id)
     budgets_by_cat = {b.category_id: b for b in list_budgets(db, household_id, month)}
     actuals = _actuals_for_month(db, household_id, month)
+    carries = rollover_carry(db, household_id, month)
     elapsed = _elapsed_fraction(month, today)
 
     out = []
@@ -206,7 +260,7 @@ def status(
         row = budgets_by_cat.get(cat.id)
         budgeted = row.amount if row else Decimal(0)
         rollover = row.rollover if row else False
-        carry_in = Decimal(0)
+        carry_in = carries.get(cat.id, Decimal(0))
         effective = budgeted + carry_in
         actual = actuals.get(cat.id, Decimal(0))
         remaining = effective - actual

@@ -290,3 +290,136 @@ def test_pace_is_none_for_an_unbudgeted_category(db, household, account):
     rows = budgets.status(db, household.id, date(2026, 7, 1), today=date(2026, 7, 15))
     groceries = next(r for r in rows if r.category_id == GROCERIES)
     assert groceries.pace is None
+
+
+def test_rollover_carries_unspent_effective_budget_into_the_next_month(db, household, account):
+    ensure_system_categories(db)
+    budgets.upsert(
+        db, household.id, date(2026, 5, 1), [budgets.BudgetItem(GROCERIES, Decimal("100.00"))]
+    )
+    _spend(db, household, account, GROCERIES, date(2026, 5, 1), "-60.00")
+    budgets.upsert(
+        db,
+        household.id,
+        date(2026, 6, 1),
+        [budgets.BudgetItem(GROCERIES, Decimal("100.00"), rollover=True)],
+    )
+    _spend(db, household, account, GROCERIES, date(2026, 6, 1), "-50.00")
+
+    june = next(
+        r
+        for r in budgets.status(db, household.id, date(2026, 6, 1), today=date(2026, 6, 30))
+        if r.category_id == GROCERIES
+    )
+    assert june.carry_in == Decimal("40.00")  # May: 100 budgeted, 60 spent, 40 left
+    assert june.effective_budget == Decimal("140.00")
+    assert june.remaining == Decimal("90.00")  # 140 - 50
+
+
+def test_a_month_without_the_rollover_flag_carries_nothing(db, household, account):
+    ensure_system_categories(db)
+    budgets.upsert(
+        db, household.id, date(2026, 5, 1), [budgets.BudgetItem(GROCERIES, Decimal("100.00"))]
+    )
+    _spend(db, household, account, GROCERIES, date(2026, 5, 1), "-60.00")
+    budgets.upsert(
+        db, household.id, date(2026, 6, 1), [budgets.BudgetItem(GROCERIES, Decimal("100.00"))]
+    )
+    june = next(
+        r
+        for r in budgets.status(db, household.id, date(2026, 6, 1), today=date(2026, 6, 30))
+        if r.category_id == GROCERIES
+    )
+    assert june.carry_in == Decimal("0")
+    assert june.effective_budget == Decimal("100.00")
+
+
+def test_rollover_with_no_prior_months_budget_carries_nothing(db, household):
+    ensure_system_categories(db)
+    budgets.upsert(
+        db,
+        household.id,
+        date(2026, 6, 1),
+        [budgets.BudgetItem(GROCERIES, Decimal("100.00"), rollover=True)],
+    )
+    june = next(
+        r
+        for r in budgets.status(db, household.id, date(2026, 6, 1), today=date(2026, 6, 30))
+        if r.category_id == GROCERIES
+    )
+    assert june.carry_in == Decimal("0")
+
+
+def test_rollover_chains_across_three_months(db, household, account):
+    ensure_system_categories(db)
+    budgets.upsert(
+        db, household.id, date(2026, 5, 1), [budgets.BudgetItem(GROCERIES, Decimal("100.00"))]
+    )
+    _spend(db, household, account, GROCERIES, date(2026, 5, 1), "-60.00")
+    budgets.upsert(
+        db,
+        household.id,
+        date(2026, 6, 1),
+        [budgets.BudgetItem(GROCERIES, Decimal("100.00"), rollover=True)],
+    )
+    _spend(db, household, account, GROCERIES, date(2026, 6, 1), "-50.00")
+    budgets.upsert(
+        db,
+        household.id,
+        date(2026, 7, 1),
+        [budgets.BudgetItem(GROCERIES, Decimal("100.00"), rollover=True)],
+    )
+    _spend(db, household, account, GROCERIES, date(2026, 7, 1), "-80.00")
+
+    july = next(
+        r
+        for r in budgets.status(db, household.id, date(2026, 7, 1), today=date(2026, 7, 31))
+        if r.category_id == GROCERIES
+    )
+    # May: 100 - 60 = 40 carries into June (140 effective, 50 spent -> 90 left).
+    # June's 90 left carries into July: 100 + 90 = 190 effective, 80 spent -> 110 left.
+    assert july.carry_in == Decimal("90.00")
+    assert july.effective_budget == Decimal("190.00")
+    assert july.remaining == Decimal("110.00")
+
+
+def test_turning_rollover_off_does_not_rewrite_any_stored_amount(db, household, account):
+    """The invariant this design exists for: carry is computed on read, never written,
+    so toggling the flag can never corrupt a number that was already saved."""
+    ensure_system_categories(db)
+    budgets.upsert(
+        db, household.id, date(2026, 5, 1), [budgets.BudgetItem(GROCERIES, Decimal("100.00"))]
+    )
+    _spend(db, household, account, GROCERIES, date(2026, 5, 1), "-60.00")
+    budgets.upsert(
+        db,
+        household.id,
+        date(2026, 6, 1),
+        [budgets.BudgetItem(GROCERIES, Decimal("100.00"), rollover=True)],
+    )
+
+    with_rollover = next(
+        r
+        for r in budgets.status(db, household.id, date(2026, 6, 1), today=date(2026, 6, 30))
+        if r.category_id == GROCERIES
+    )
+    assert with_rollover.effective_budget == Decimal("140.00")
+
+    budgets.upsert(
+        db,
+        household.id,
+        date(2026, 6, 1),
+        [budgets.BudgetItem(GROCERIES, Decimal("100.00"), rollover=False)],
+    )
+    may_row = next(iter(budgets.list_budgets(db, household.id, date(2026, 5, 1))))
+    june_row = next(iter(budgets.list_budgets(db, household.id, date(2026, 6, 1))))
+    assert may_row.amount == Decimal("100.0000")
+    assert june_row.amount == Decimal("100.0000")
+
+    without_rollover = next(
+        r
+        for r in budgets.status(db, household.id, date(2026, 6, 1), today=date(2026, 6, 30))
+        if r.category_id == GROCERIES
+    )
+    assert without_rollover.effective_budget == Decimal("100.00")
+    assert without_rollover.carry_in == Decimal("0")
