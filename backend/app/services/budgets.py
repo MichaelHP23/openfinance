@@ -244,8 +244,8 @@ def status(
     under. It is a ratio, not an amount of money, so unlike every other field on this
     dataclass it is a plain `float` — do not change it to `Decimal`.
 
-    `carry_in` is always zero here; Task 4 wires in the real rollover computation
-    without changing this function's shape.
+    `carry_in` is computed by `rollover_carry()` from stored budget history and actual
+    spend — it is zero only for rows where rollover is false or no prior month exists.
     """
     month = _first_of_month(month)
     today = today or datetime.now(tz=UTC).date()
