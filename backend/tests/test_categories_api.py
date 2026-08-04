@@ -340,3 +340,26 @@ def test_suggest_survives_json_too_deeply_nested_to_parse(
     res = client.post("/categories/suggest")
     assert res.status_code == 200
     assert res.json()["suggestions"] == []
+
+
+def test_deleting_a_budgeted_category_is_refused(client, db, household):
+    # The FK cascades at the schema level, so without a service-level guard the budget
+    # would vanish silently and the household would only notice when the Budgets page
+    # stopped showing a row it had money against.
+    from datetime import date
+    from decimal import Decimal
+
+    from app.models.budget import Budget
+
+    ensure_system_categories(db)
+    created = client.post("/categories", json={"name": "Boat Fuel"}).json()
+    db.add(
+        Budget(
+            household_id=household.id,
+            category_id=uuid.UUID(created["id"]),
+            month=date(2026, 7, 1),
+            amount=Decimal("100.00"),
+        )
+    )
+    db.commit()
+    assert client.delete(f"/categories/{created['id']}").status_code == 409
