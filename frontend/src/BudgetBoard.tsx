@@ -38,6 +38,10 @@ export function BudgetBoard({
   const setDraft = (categoryId: string, value: string) =>
     setDrafts((d) => ({ ...d, [categoryId]: value }));
 
+  // Blank drafts (e.g. a cleared input) never produce anything to send — so a
+  // Save button that's only visible, not also gated on this, would be a dead end.
+  const hasSaveableDraft = Object.values(drafts).some((v) => v.trim() !== "");
+
   const save = () => {
     const items: BudgetItem[] = Object.entries(drafts)
       .filter(([, v]) => v.trim() !== "")
@@ -144,7 +148,7 @@ export function BudgetBoard({
       )}
 
       {Object.keys(drafts).length > 0 && (
-        <button className="mt-4" onClick={save} disabled={upsert.isPending}>
+        <button className="mt-4" onClick={save} disabled={upsert.isPending || !hasSaveableDraft}>
           {upsert.isPending ? "Saving…" : "Save changes"}
         </button>
       )}

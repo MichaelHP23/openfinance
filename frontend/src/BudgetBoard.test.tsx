@@ -62,4 +62,19 @@ describe("BudgetBoard", () => {
     await screen.findByText("Groceries");
     expect(screen.queryByRole("button", { name: "Save changes" })).not.toBeInTheDocument();
   });
+
+  it("disables save when the only edit is a blanked-out input", async () => {
+    vi.mocked(apiFetch).mockResolvedValue([row()]);
+    show();
+    const input = await screen.findByLabelText("Budget for Groceries");
+    fireEvent.change(input, { target: { value: "" } });
+    const saveButton = await screen.findByRole("button", { name: "Save changes" });
+    expect(saveButton).toBeDisabled();
+    fireEvent.click(saveButton);
+    // A disabled button doesn't fire onClick, so no PUT should ever go out.
+    expect(apiFetch).not.toHaveBeenCalledWith(
+      "/budgets/2026-07",
+      expect.objectContaining({ method: "PUT" }),
+    );
+  });
 });
