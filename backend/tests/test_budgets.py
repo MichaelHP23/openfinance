@@ -82,3 +82,90 @@ def test_a_different_household_can_budget_the_same_category_and_month(db):
     db.add(Budget(household_id=h1.id, category_id=GROCERIES, month=date(2026, 7, 1), amount=Decimal("1.00")))
     db.add(Budget(household_id=h2.id, category_id=GROCERIES, month=date(2026, 7, 1), amount=Decimal("1.00")))
     db.commit()  # must not raise: the unique constraint is scoped per household
+
+
+from app.services import budgets
+
+
+def test_parse_month_reads_year_dash_month():
+    assert budgets.parse_month("2026-07") == date(2026, 7, 1)
+
+
+def test_parse_month_rejects_garbage():
+    with pytest.raises(budgets.BadMonth):
+        budgets.parse_month("not-a-month")
+
+
+def test_parse_month_rejects_a_full_date():
+    # The whole point of the path segment is "no day" — the day is always the 1st.
+    with pytest.raises(budgets.BadMonth):
+        budgets.parse_month("2026-07-15")
+
+
+def test_upsert_creates_a_row(db, household):
+    ensure_system_categories(db)
+    rows = budgets.upsert(
+        db,
+        household.id,
+        date(2026, 7, 1),
+        [budgets.BudgetItem(category_id=GROCERIES, amount=Decimal("300.00"))],
+    )
+    assert len(rows) == 1
+    assert rows[0].amount == Decimal("300.0000")
+    assert rows[0].month == date(2026, 7, 1)
+    assert rows[0].rollover is False
+
+
+def test_upsert_on_an_existing_row_updates_it_in_place(db, household):
+    ensure_system_categories(db)
+    budgets.upsert(
+        db,
+        household.id,
+        date(2026, 7, 1),
+        [budgets.BudgetItem(category_id=GROCERIES, amount=Decimal("300.00"))],
+    )
+    budgets.upsert(
+        db,
+        household.id,
+        date(2026, 7, 1),
+        [budgets.BudgetItem(category_id=GROCERIES, amount=Decimal("350.00"), rollover=True)],
+    )
+    rows = budgets.list_budgets(db, household.id, date(2026, 7, 1))
+    assert len(rows) == 1
+    assert rows[0].amount == Decimal("350.0000")
+    assert rows[0].rollover is True
+
+
+def test_upsert_is_idempotent_when_called_with_the_same_values_twice(db, household):
+    ensure_system_categories(db)
+    item = budgets.BudgetItem(category_id=GROCERIES, amount=Decimal("300.00"))
+    budgets.upsert(db, household.id, date(2026, 7, 1), [item])
+    budgets.upsert(db, household.id, date(2026, 7, 1), [item])
+    assert len(budgets.list_budgets(db, household.id, date(2026, 7, 1))) == 1
+
+
+def test_upsert_rejects_a_category_the_household_cannot_see(db, household):
+    with pytest.raises(budgets.UnknownCategory):
+        budgets.upsert(
+            db,
+            household.id,
+            date(2026, 7, 1),
+            [budgets.BudgetItem(category_id=uuid.uuid4(), amount=Decimal("10.00"))],
+        )
+
+
+def test_upsert_rejects_another_households_custom_category(db, household):
+    from app.schemas.category import CategoryCreate
+    from app.services import categories
+
+    other = Household(name="Other Household")
+    db.add(other)
+    db.commit()
+    theirs = categories.create(db, other.id, CategoryCreate(name="Their Category"))
+    with pytest.raises(budgets.UnknownCategory):
+        budgets.upsert(
+            db,
+            household.id,
+            date(2026, 7, 1),
+            [budgets.BudgetItem(category_id=theirs.id, amount=Decimal("10.00"))],
+        )
