@@ -1,15 +1,26 @@
 import type { ReactNode } from "react";
 import { NavLink } from "react-router-dom";
 import { apiFetch } from "../api/client";
+import { MoreMenu } from "./MoreMenu";
 
+// Three fixed mobile tabs, down from five — see PLAN-CONSTRAINTS.md's Navigation
+// section. A fourth slot is the MoreMenu trigger rendered below, not a fourth entry
+// here: the trigger isn't a route, so giving it a fake NAV-shaped object just to keep a
+// literal "four items in one array" would be a distinction with no behavioral payoff.
 const NAV = [
   { to: "/", label: "Overview", short: "Overview", end: true, glyph: "◔" },
   { to: "/accounts", label: "Accounts", short: "Accounts", end: false, glyph: "▤" },
-  { to: "/investments", label: "Investments", short: "Invest", end: false, glyph: "◈" },
   { to: "/transactions", label: "Transactions", short: "Activity", end: false, glyph: "⇅" },
-  // Five tabs is the ceiling: each is flex-1, so a 360px phone gives 72px a tab and
-  // "Bills" is the longest short label that still fits on one line.
+];
+
+// Destinations that don't fit the mobile tab bar's three fixed slots. Desktop's sidebar
+// still shows every one of these, undivided with NAV — the ceiling here is a phone's
+// width, not a design preference. P3 and P5 each push one entry onto this array and
+// change nothing else; a plan that rebuilds this menu instead is wrong.
+export const MORE = [
+  { to: "/investments", label: "Investments", short: "Invest", end: false, glyph: "◈" },
   { to: "/recurring", label: "Recurring", short: "Bills", end: false, glyph: "↻" },
+  { to: "/budgets", label: "Budgets", short: "Budgets", end: false, glyph: "▥" },
 ];
 
 export function Shell({ children, localMode }: { children: ReactNode; localMode: boolean }) {
@@ -28,7 +39,7 @@ export function Shell({ children, localMode }: { children: ReactNode; localMode:
           </div>
 
           <nav className="flex flex-col gap-1">
-            {NAV.map((n) => (
+            {[...NAV, ...MORE].map((n) => (
               <NavLink
                 key={n.to}
                 to={n.to}
@@ -108,6 +119,7 @@ export function Shell({ children, localMode }: { children: ReactNode; localMode:
             )}
           </NavLink>
         ))}
+        <MoreMenu items={MORE} />
       </nav>
     </div>
   );

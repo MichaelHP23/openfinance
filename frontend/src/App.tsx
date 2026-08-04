@@ -9,6 +9,7 @@ import { AccountDetailPage } from "./pages/AccountDetailPage";
 import { InvestmentsPage } from "./pages/InvestmentsPage";
 import { TransactionsPage } from "./pages/TransactionsPage";
 import { RecurringPage } from "./pages/RecurringPage";
+import { BudgetsPage } from "./pages/BudgetsPage";
 import { Shell } from "./ui/Shell";
 
 const qc = new QueryClient();
@@ -86,6 +87,14 @@ export default function App() {
             element={
               <Protected>
                 <RecurringPage />
+              </Protected>
+            }
+          />
+          <Route
+            path="/budgets"
+            element={
+              <Protected>
+                <BudgetsPage />
               </Protected>
             }
           />
