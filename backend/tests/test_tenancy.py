@@ -1,7 +1,11 @@
+from datetime import date
+from decimal import Decimal
+
 from app.models.household import Household
 from app.schemas.account import AccountCreate
+from app.schemas.budget import BudgetItemIn  # noqa: F401  (kept import-adjacent; unused directly)
 from app.schemas.category import CategoryCreate, RuleCreate, RuleUpdate
-from app.services import accounts, categories, categorization
+from app.services import accounts, budgets, categories, categorization
 from app.services.categories import ensure_system_categories, system_category_id
 
 
@@ -61,3 +65,19 @@ def test_custom_categories_isolated_but_system_ones_are_shared(db):
         pass
     else:
         raise AssertionError("expected UnknownCategory")
+
+
+def test_budgets_isolated_by_household(db):
+    h1, h2 = _household(db).id, _household(db).id
+    ensure_system_categories(db)
+    groceries = system_category_id("Food & Drink/Groceries")
+    budgets.upsert(
+        db, h1, date(2026, 7, 1), [budgets.BudgetItem(groceries, Decimal("300.00"))]
+    )
+
+    assert len(budgets.list_budgets(db, h1, date(2026, 7, 1))) == 1
+    assert len(budgets.list_budgets(db, h2, date(2026, 7, 1))) == 0
+    h2_status = next(
+        r for r in budgets.status(db, h2, date(2026, 7, 1)) if r.category_id == groceries
+    )
+    assert h2_status.budgeted == Decimal("0")

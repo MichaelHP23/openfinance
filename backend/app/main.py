@@ -6,6 +6,7 @@ from slowapi.errors import RateLimitExceeded
 from app.api import (
     accounts,
     auth,
+    budgets,
     categories,
     category_rules,
     connections,
@@ -63,6 +64,7 @@ app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # type: ignore[arg-type]
 app.include_router(auth.router)
 app.include_router(accounts.router)
+app.include_router(budgets.router)
 app.include_router(categories.router)
 app.include_router(category_rules.router)
 app.include_router(transactions.router)
