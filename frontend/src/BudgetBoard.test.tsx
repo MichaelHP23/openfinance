@@ -63,6 +63,21 @@ describe("BudgetBoard", () => {
     expect(screen.queryByRole("button", { name: "Save changes" })).not.toBeInTheDocument();
   });
 
+  it("shows the carry-in when nonzero", async () => {
+    vi.mocked(apiFetch).mockResolvedValue([
+      row({ carry_in: "40.0000", effective_budget: "140.0000", rollover: true }),
+    ]);
+    show();
+    expect(await screen.findByText("+$40.00 carried in")).toBeInTheDocument();
+  });
+
+  it("does not show a carry-in indicator when carry_in is zero", async () => {
+    vi.mocked(apiFetch).mockResolvedValue([row({ carry_in: "0.0000" })]);
+    show();
+    await screen.findByText("Groceries");
+    expect(screen.queryByText(/carried in/)).not.toBeInTheDocument();
+  });
+
   it("disables save when the only edit is a blanked-out input", async () => {
     vi.mocked(apiFetch).mockResolvedValue([row()]);
     show();

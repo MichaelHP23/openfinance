@@ -26,7 +26,11 @@ test("mobile navigation and layout", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "Accounts" })).toBeVisible();
   await checkWidth("accounts");
 
-  await page.getByRole("link", { name: "Invest" }).click();
+  // Investments moved off the fixed tab bar in P2's nav restructure — it now lives
+  // inside the More sheet, under its full label "Investments" (the "Invest" tab-bar
+  // label from before no longer exists as a link).
+  await page.getByRole("button", { name: "More" }).click();
+  await page.getByRole("menuitem", { name: "Investments" }).click();
   await page.waitForTimeout(900);
   await expect(page.getByRole("heading", { name: "Investments" })).toBeVisible();
   await checkWidth("investments");

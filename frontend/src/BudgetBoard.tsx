@@ -112,6 +112,11 @@ export function BudgetBoard({
                       onChange={(e) => setDraft(r.category_id, e.target.value)}
                       className="w-24 text-[13px]"
                     />
+                    {Number(r.carry_in) !== 0 && (
+                      <span className="ml-2 text-[12px] text-muted">
+                        +{usd(r.carry_in)} carried in
+                      </span>
+                    )}
                   </td>
                   <td className="py-2">
                     <label className="flex items-center gap-1 text-[12px] text-muted">
