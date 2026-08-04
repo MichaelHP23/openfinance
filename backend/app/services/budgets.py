@@ -324,3 +324,21 @@ def suggest(db: Session, household_id: uuid.UUID, month: date) -> list[BudgetSug
         )
     out.sort(key=lambda s: s.category_name)
     return out
+
+
+def copy_from(
+    db: Session, household_id: uuid.UUID, src_month: date, dst_month: date
+) -> int:
+    """Copy every budgeted category from `src_month` into `dst_month`. Upserts under the
+    hood, so running it twice leaves the same rows rather than erroring the second time.
+    """
+    src_month = _first_of_month(src_month)
+    dst_month = _first_of_month(dst_month)
+    items = [
+        BudgetItem(category_id=row.category_id, amount=row.amount, rollover=row.rollover)
+        for row in list_budgets(db, household_id, src_month)
+    ]
+    if not items:
+        return 0
+    upsert(db, household_id, dst_month, items)
+    return len(items)

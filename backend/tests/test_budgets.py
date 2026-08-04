@@ -485,3 +485,37 @@ def test_suggest_writes_nothing(db, household, account):
     _spend(db, household, account, GROCERIES, date(2026, 6, 1), "-40.00")
     budgets.suggest(db, household.id, date(2026, 7, 1))
     assert budgets.list_budgets(db, household.id, date(2026, 7, 1)) == []
+
+
+def test_copy_from_duplicates_every_budgeted_category(db, household):
+    ensure_system_categories(db)
+    coffee = system_category_id("Food & Drink/Coffee")
+    budgets.upsert(
+        db,
+        household.id,
+        date(2026, 6, 1),
+        [
+            budgets.BudgetItem(GROCERIES, Decimal("300.00")),
+            budgets.BudgetItem(coffee, Decimal("40.00"), rollover=True),
+        ],
+    )
+    copied = budgets.copy_from(db, household.id, date(2026, 6, 1), date(2026, 7, 1))
+    assert copied == 2
+    july = {b.category_id: b for b in budgets.list_budgets(db, household.id, date(2026, 7, 1))}
+    assert july[GROCERIES].amount == Decimal("300.0000")
+    assert july[coffee].rollover is True
+
+
+def test_copy_from_is_idempotent(db, household):
+    ensure_system_categories(db)
+    budgets.upsert(
+        db, household.id, date(2026, 6, 1), [budgets.BudgetItem(GROCERIES, Decimal("300.00"))]
+    )
+    budgets.copy_from(db, household.id, date(2026, 6, 1), date(2026, 7, 1))
+    budgets.copy_from(db, household.id, date(2026, 6, 1), date(2026, 7, 1))
+    assert len(budgets.list_budgets(db, household.id, date(2026, 7, 1))) == 1
+
+
+def test_copy_from_an_empty_month_copies_nothing(db, household):
+    ensure_system_categories(db)
+    assert budgets.copy_from(db, household.id, date(2026, 1, 1), date(2026, 7, 1)) == 0
