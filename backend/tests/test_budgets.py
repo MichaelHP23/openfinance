@@ -423,3 +423,65 @@ def test_turning_rollover_off_does_not_rewrite_any_stored_amount(db, household, 
     )
     assert without_rollover.effective_budget == Decimal("100.00")
     assert without_rollover.carry_in == Decimal("0")
+
+
+def test_suggest_is_the_median_of_the_trailing_three_months(db, household, account):
+    ensure_system_categories(db)
+    for month, amt in [
+        (date(2026, 4, 1), "-30.00"),
+        (date(2026, 5, 1), "-50.00"),
+        (date(2026, 6, 1), "-40.00"),
+    ]:
+        _spend(db, household, account, GROCERIES, month, amt)
+    suggestions = budgets.suggest(db, household.id, date(2026, 7, 1))
+    groceries = next(s for s in suggestions if s.category_id == GROCERIES)
+    assert groceries.amount == Decimal("40")  # median(30, 40, 50) = 40, already a multiple of 5
+
+
+def test_suggest_rounds_to_the_nearest_5(db, household, account):
+    ensure_system_categories(db)
+    for month, amt in [
+        (date(2026, 4, 1), "-31.00"),
+        (date(2026, 5, 1), "-33.00"),
+        (date(2026, 6, 1), "-32.00"),
+    ]:
+        _spend(db, household, account, GROCERIES, month, amt)
+    suggestions = budgets.suggest(db, household.id, date(2026, 7, 1))
+    groceries = next(s for s in suggestions if s.category_id == GROCERIES)
+    assert groceries.amount == Decimal("30")  # median(31, 32, 33) = 32 -> nearest 5 is 30
+
+
+def test_suggest_ignores_a_month_with_no_data_for_that_category(db, household, account):
+    ensure_system_categories(db)
+    coffee = system_category_id("Food & Drink/Coffee")
+    # Only one of the trailing three months has any Coffee spend at all.
+    _spend(db, household, account, coffee, date(2026, 6, 1), "-9.00")
+    suggestions = budgets.suggest(db, household.id, date(2026, 7, 1))
+    coffee_suggestion = next(s for s in suggestions if s.category_id == coffee)
+    # A single sample's median is that sample, rounded — not dragged toward zero by two
+    # months where the category simply never came up.
+    assert coffee_suggestion.amount == Decimal("10")
+
+
+def test_suggest_omits_a_category_with_no_data_in_any_trailing_month(db, household):
+    ensure_system_categories(db)
+    coffee = system_category_id("Food & Drink/Coffee")
+    suggestions = budgets.suggest(db, household.id, date(2026, 7, 1))
+    assert all(s.category_id != coffee for s in suggestions)
+
+
+def test_suggest_only_looks_at_the_three_months_immediately_before(db, household, account):
+    ensure_system_categories(db)
+    # Four months back is out of window and must not affect the median.
+    _spend(db, household, account, GROCERIES, date(2026, 3, 1), "-1000.00")
+    _spend(db, household, account, GROCERIES, date(2026, 6, 1), "-40.00")
+    suggestions = budgets.suggest(db, household.id, date(2026, 7, 1))
+    groceries = next(s for s in suggestions if s.category_id == GROCERIES)
+    assert groceries.amount == Decimal("40")
+
+
+def test_suggest_writes_nothing(db, household, account):
+    ensure_system_categories(db)
+    _spend(db, household, account, GROCERIES, date(2026, 6, 1), "-40.00")
+    budgets.suggest(db, household.id, date(2026, 7, 1))
+    assert budgets.list_budgets(db, household.id, date(2026, 7, 1)) == []

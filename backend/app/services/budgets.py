@@ -9,7 +9,8 @@ import uuid
 from calendar import monthrange
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
+from statistics import median
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -280,4 +281,46 @@ def status(
                 rollover=rollover,
             )
         )
+    return out
+
+
+@dataclass
+class BudgetSuggestion:
+    category_id: uuid.UUID
+    category_name: str
+    amount: Decimal
+
+
+def _round_to_5(value: Decimal) -> Decimal:
+    return (value / 5).to_integral_value(rounding=ROUND_HALF_UP) * 5
+
+
+def suggest(db: Session, household_id: uuid.UUID, month: date) -> list[BudgetSuggestion]:
+    """Trailing-3-month median actual per category, rounded to the nearest 5. This is
+    the whole "AI sets up your budget" pitch without a model: a median over three named
+    months is something the user can recompute by hand, which a model's guess never is.
+    Writes nothing — the caller decides which suggestions become budgets via `upsert`.
+    """
+    month = _first_of_month(month)
+    trailing = [_prior_month(month)]
+    trailing.append(_prior_month(trailing[-1]))
+    trailing.append(_prior_month(trailing[-1]))
+    per_month = [_actuals_for_month(db, household_id, m) for m in trailing]
+
+    out: list[BudgetSuggestion] = []
+    for cat in _leaf_categories(db, household_id):
+        # A month with no transactions in this category is missing data, not a zero —
+        # counting it would drag the median toward zero for anything spent less than
+        # monthly (an annual insurance premium, a twice-a-year vet visit).
+        samples = [m[cat.id] for m in per_month if cat.id in m]
+        if not samples:
+            continue
+        out.append(
+            BudgetSuggestion(
+                category_id=cat.id,
+                category_name=cat.name,
+                amount=_round_to_5(median(samples)),
+            )
+        )
+    out.sort(key=lambda s: s.category_name)
     return out
