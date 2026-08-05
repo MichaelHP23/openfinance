@@ -80,8 +80,9 @@ npm run lint
   them; progress is always today's actual balance, never a separate ledger that can
   drift from it. A cash-flow forecast on Overview projects forward from today's
   balances, your recurring bills, and this month's budget — with a "can I afford…"
-  check that shows what a hypothetical purchase does to the projection and to every
-  active goal's date.
+  check that shows what a hypothetical purchase does to the projection and whether
+  the balance stays non-negative. (The API also computes the impact on every active
+  goal's projected date; the UI doesn't surface that part yet.)
 - Local mode (no login) or full email/password auth: argon2id, server-side sessions,
   rate limits.
 - `BankProvider` protocol with a `ManualProvider`; credentials sealed with AES-GCM
