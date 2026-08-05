@@ -1,3 +1,4 @@
+from datetime import date, timedelta
 from decimal import Decimal
 
 import pytest
@@ -54,8 +55,12 @@ def test_get_forecast_rejects_an_out_of_range_months_with_422_not_500(client, ac
 
 
 def test_afford_endpoint_returns_both_series_and_a_verdict(client, account):
+    # A few days out from whatever "today" actually is — the route has no `today`
+    # override, so a hardcoded historical date would now fall outside the
+    # (real-clock) forecast horizon and be rejected as out-of-range.
+    soon = (date.today() + timedelta(days=5)).isoformat()
     res = client.post(
-        "/forecast/afford", json={"amount": "200.00", "on_date": "2026-07-05", "months": 1}
+        "/forecast/afford", json={"amount": "200.00", "on_date": soon, "months": 1}
     )
     assert res.status_code == 200
     body = res.json()
@@ -66,5 +71,15 @@ def test_afford_endpoint_returns_both_series_and_a_verdict(client, account):
 def test_afford_endpoint_rejects_a_non_positive_amount_with_422(client, account):
     res = client.post(
         "/forecast/afford", json={"amount": "0", "on_date": "2026-07-05", "months": 1}
+    )
+    assert res.status_code == 422
+
+
+def test_afford_endpoint_rejects_an_on_date_beyond_the_forecast_horizon_with_422(client, account):
+    # 400 days out with only a 1-month horizon is beyond range regardless of
+    # whatever "today" happens to be when this test runs.
+    beyond = (date.today() + timedelta(days=400)).isoformat()
+    res = client.post(
+        "/forecast/afford", json={"amount": "200.00", "on_date": beyond, "months": 1}
     )
     assert res.status_code == 422

@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 from app.models.account import Account, AccountType
 from app.models.goal import Goal, GoalStatus
 from app.models.recurring import Cadence, RecurringSeries, SeriesStatus
+from app.models.transaction import Transaction
 from app.services import budgets, goals, recurring
 
 # Balances a household can actually spend from. Net worth (services/snapshots.py,
@@ -79,13 +80,30 @@ def _recurring_covered_categories(db: Session, household_id: uuid.UUID) -> set[u
     """Category ids already accounted for by an active recurring series, so this
     doesn't double-count a subscription as both a recurring line and discretionary
     spend. RecurringSeries carries no category of its own, so this is built from the
-    transactions each series already matches — exactly as expensive as
-    recurring.charges() already is anywhere else it's called."""
+    transactions each series already matches.
+
+    Loads the household's transactions once and matches them against every active
+    series in Python (same (merchant_key, sign(amount)) match recurring.charges()
+    uses), rather than calling recurring.charges() — and its own full-table
+    select — once per series."""
+    active_series = recurring.list_for(db, household_id, status=SeriesStatus.active)
+    if not active_series:
+        return set()
+
+    txns = list(
+        db.scalars(select(Transaction).where(Transaction.household_id == household_id))
+    )
+    by_key_and_direction: dict[tuple[str, int], set[uuid.UUID]] = {}
+    for txn in txns:
+        if txn.category_id is None:
+            continue
+        key = recurring.merchant_key(txn.merchant_normalized or txn.merchant_raw)
+        direction = 1 if txn.amount >= 0 else -1
+        by_key_and_direction.setdefault((key, direction), set()).add(txn.category_id)
+
     covered: set[uuid.UUID] = set()
-    for series in recurring.list_for(db, household_id, status=SeriesStatus.active):
-        for txn in recurring.charges(db, household_id, series):
-            if txn.category_id is not None:
-                covered.add(txn.category_id)
+    for series in active_series:
+        covered |= by_key_and_direction.get((series.merchant_key, series.direction), set())
     return covered
 
 
@@ -150,7 +168,9 @@ def project(
         Decimal(0),
     )
     daily_discretionary = (
-        discretionary_total / days_in_month if discretionary_total else Decimal(0)
+        (discretionary_total / days_in_month).quantize(Decimal("0.01"))
+        if discretionary_total
+        else Decimal(0)
     )
 
     by_date: dict[date, list[Hypothetical]] = {}
@@ -246,6 +266,12 @@ class AffordabilityResult:
     goal_impact: list[GoalAffordability]
 
 
+class OutOfRangeDate(Exception):
+    """The hypothetical's on_date falls outside the forecast horizon that project()
+    actually walks, so applying it there would silently do nothing and produce a
+    meaningless (falsely reassuring) verdict."""
+
+
 def can_i_afford(
     db: Session,
     household_id: uuid.UUID,
@@ -259,6 +285,11 @@ def can_i_afford(
     number on the "can I afford this" screen traces to the same walk the forecast
     chart already draws, rather than a separate estimate."""
     today = today or datetime.now(UTC).date()
+    horizon_end = _add_months(today, months)
+    if not today <= on_date <= horizon_end:
+        raise OutOfRangeDate(
+            f"on_date must be between {today.isoformat()} and {horizon_end.isoformat()}"
+        )
     baseline = project(db, household_id, months, today=today)
     outflow = Hypothetical(amount=-abs(amount), on_date=on_date, label="Hypothetical purchase")
     with_amount = project(db, household_id, months, [outflow], today=today)

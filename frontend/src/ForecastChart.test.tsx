@@ -56,8 +56,12 @@ describe("ForecastChart", () => {
       return days();
     });
     show();
+    // A few days out from whatever "today" actually is — the Date input now has a
+    // `min` of today, so a hardcoded past date would fail native validation and
+    // silently block the submit.
+    const soon = new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
     fireEvent.change(await screen.findByLabelText("Amount"), { target: { value: "500" } });
-    fireEvent.change(screen.getByLabelText("Date"), { target: { value: "2026-07-10" } });
+    fireEvent.change(screen.getByLabelText("Date"), { target: { value: soon } });
     fireEvent.click(screen.getByRole("button", { name: "Check" }));
     expect(await screen.findByText(/stays at \$50\.00/)).toBeInTheDocument();
   });

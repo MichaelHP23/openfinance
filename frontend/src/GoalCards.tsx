@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useAccounts } from "./data";
 import { goalPercent, useCreateGoal, useDeleteGoal, useGoals, useUpdateGoal } from "./goals";
 import type { Goal } from "./goals";
-import { shortDate, usd } from "./money";
+import { longDate, usd } from "./money";
 import { Card, Empty } from "./ui/Shell";
 
 function GoalRing({ percent }: { percent: number }) {
@@ -42,8 +42,10 @@ function GoalRow({ goal }: { goal: Goal }) {
         <p className="truncate text-sm font-medium">{goal.name}</p>
         <p className="tnum mt-0.5 text-xs text-muted">
           {usd(goal.progress)} of {usd(goal.target_amount)}
-          {goal.projected_date && <> · projected {shortDate(goal.projected_date)}</>}
+          {goal.projected_date && <> · projected {longDate(goal.projected_date)}</>}
         </p>
+        {update.isError && <p className="text-sm text-clay">{(update.error as Error).message}</p>}
+        {del.isError && <p className="text-sm text-clay">{(del.error as Error).message}</p>}
       </div>
       <button
         className="text-xs text-muted transition-colors hover:text-bone"
@@ -127,23 +129,25 @@ function NewGoalForm() {
       <button className="btn" disabled={create.isPending}>
         Add goal
       </button>
+      {create.isError && <p className="text-sm text-clay">{(create.error as Error).message}</p>}
     </form>
   );
 }
 
 export function GoalCards() {
   const { data: goalList = [], isLoading } = useGoals();
+  const active = goalList.filter((g) => g.status !== "archived");
 
   return (
     <Card>
       <h2 className="mb-4 text-sm font-medium">Your goals</h2>
       <NewGoalForm />
       <div className="mt-6">
-        {isLoading ? null : goalList.length === 0 ? (
+        {isLoading ? null : active.length === 0 ? (
           <Empty>No goals yet — add one above.</Empty>
         ) : (
           <ul>
-            {goalList.map((g) => (
+            {active.map((g) => (
               <GoalRow key={g.id} goal={g} />
             ))}
           </ul>

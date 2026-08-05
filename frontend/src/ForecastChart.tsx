@@ -11,6 +11,7 @@ export function ForecastChart() {
   const afford = useAfford();
 
   const negative = firstNegativeDay(days);
+  const todayIso = new Date().toISOString().slice(0, 10);
 
   return (
     <Card className="mt-4" delay={200}>
@@ -50,16 +51,26 @@ export function ForecastChart() {
             onChange={(e) => setAmount(e.target.value)}
             inputMode="decimal"
             placeholder="500"
+            required
           />
         </label>
         <label className="flex flex-col gap-1 text-xs">
           Date
-          <input aria-label="Date" type="date" value={onDate} onChange={(e) => setOnDate(e.target.value)} />
+          <input
+            aria-label="Date"
+            type="date"
+            value={onDate}
+            onChange={(e) => setOnDate(e.target.value)}
+            min={todayIso}
+            required
+          />
         </label>
         <button className="btn" disabled={afford.isPending}>
           Check
         </button>
       </form>
+
+      {afford.isError && <p className="text-sm text-clay">{(afford.error as Error).message}</p>}
 
       {afford.data && (
         <p className="mt-3 text-sm">

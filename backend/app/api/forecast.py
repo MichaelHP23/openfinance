@@ -34,7 +34,10 @@ def get_forecast(
 def afford(
     body: AffordIn, hid: uuid.UUID = Depends(require_household), db: Session = Depends(get_db)
 ) -> AffordOut:
-    result = forecast.can_i_afford(db, hid, body.amount, body.on_date, body.months)
+    try:
+        result = forecast.can_i_afford(db, hid, body.amount, body.on_date, body.months)
+    except forecast.OutOfRangeDate as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     return AffordOut(
         baseline=[_day_out(d) for d in result.baseline],
         with_amount=[_day_out(d) for d in result.with_amount],

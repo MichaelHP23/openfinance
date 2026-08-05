@@ -234,6 +234,34 @@ def test_can_i_afford_an_amount_that_empties_the_account(db, household, account)
     assert result.minimum_balance == Decimal("0.00")
 
 
+def test_can_i_afford_with_a_budget_present_is_cent_exact_not_a_decimal_residue(db, household, account):
+    # Regression for the unquantized daily_discretionary bug: 100.00 / 31 is a
+    # repeating decimal, so without quantizing to cents the daily subtraction
+    # accumulates ~28-digit residue and can push an exact-zero balance to
+    # something like -1E-26, flipping stays_non_negative to False. Quantized,
+    # daily_discretionary is exactly 3.23 (100.00 / 31 rounds to that), applied
+    # once for each of the 32 days from 2026-07-01 through 2026-08-01 inclusive
+    # (32 * 3.23 = 103.36) — a hypothetical of 1096.64 should then land the
+    # account at exactly 0.00, not a near-zero artifact.
+    ensure_system_categories(db)
+    groceries = system_category_id("Food & Drink/Groceries")
+    today = date(2026, 7, 1)
+    budgets.upsert(db, household.id, today, [budgets.BudgetItem(groceries, Decimal("100.00"))])
+
+    result = forecast.can_i_afford(
+        db, household.id, Decimal("1096.64"), date(2026, 7, 5), months=1, today=today
+    )
+    assert result.stays_non_negative is True
+    assert result.minimum_balance == Decimal("0.00")
+
+
+def test_can_i_afford_raises_for_an_on_date_beyond_the_forecast_horizon(db, household, account):
+    with pytest.raises(forecast.OutOfRangeDate):
+        forecast.can_i_afford(
+            db, household.id, Decimal("100.00"), date(2026, 9, 1), months=1, today=date(2026, 7, 1)
+        )
+
+
 def test_can_i_afford_an_amount_larger_than_the_balance_goes_negative(db, household, account):
     result = forecast.can_i_afford(
         db, household.id, Decimal("1500.00"), date(2026, 7, 5), months=1, today=date(2026, 7, 1)

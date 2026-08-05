@@ -43,6 +43,19 @@ describe("GoalCards", () => {
     expect(screen.getByText(/\$400\.00 of \$1,000\.00/)).toBeInTheDocument();
   });
 
+  it("does not render an archived goal in the list", async () => {
+    const active = goal({ id: "g1", name: "Emergency Fund" });
+    const archived = goal({ id: "g2", name: "Old Boat Fund", status: "archived" });
+    vi.mocked(apiFetch).mockImplementation(async (path: string) => {
+      if (path === "/goals") return [active, archived];
+      if (path === "/accounts") return [];
+      return [];
+    });
+    show();
+    expect(await screen.findByText("Emergency Fund")).toBeInTheDocument();
+    expect(screen.queryByText("Old Boat Fund")).not.toBeInTheDocument();
+  });
+
   it("shows an empty state with no goals", async () => {
     vi.mocked(apiFetch).mockImplementation(async (path: string) => (path === "/goals" ? [] : []));
     show();
