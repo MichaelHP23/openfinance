@@ -1,11 +1,13 @@
 from datetime import date
 from decimal import Decimal
 
+from app.models.account import Account, AccountType
+from app.models.goal import GoalKind
 from app.models.household import Household
 from app.schemas.account import AccountCreate
 from app.schemas.budget import BudgetItemIn  # noqa: F401  (kept import-adjacent; unused directly)
 from app.schemas.category import CategoryCreate, RuleCreate, RuleUpdate
-from app.services import accounts, budgets, categories, categorization
+from app.services import accounts, budgets, categories, categorization, goals
 from app.services.categories import ensure_system_categories, system_category_id
 
 
@@ -81,3 +83,26 @@ def test_budgets_isolated_by_household(db):
         r for r in budgets.status(db, h2, date(2026, 7, 1)) if r.category_id == groceries
     )
     assert h2_status.budgeted == Decimal("0")
+
+
+def test_goals_isolated_by_household(db):
+    h1, h2 = _household(db).id, _household(db).id
+    a1 = Account(household_id=h1, type=AccountType.savings, name="A1", balance=Decimal("500.00"))
+    db.add(a1)
+    db.commit()
+    goal = goals.create(
+        db, h1, name="Fund", kind=GoalKind.savings, target_amount=Decimal("1000"), account_ids=[a1.id]
+    )
+
+    assert {g.name for g in goals.list_for(db, h1)} == {"Fund"}
+    assert goals.list_for(db, h2) == []
+    assert goals.get(db, h2, goal.id) is None
+    try:
+        goals.create(
+            db, h2, name="Borrowed", kind=GoalKind.savings, target_amount=Decimal("1"),
+            account_ids=[a1.id],
+        )
+    except goals.UnknownAccount:
+        pass
+    else:
+        raise AssertionError("expected UnknownAccount")
