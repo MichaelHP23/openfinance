@@ -11,10 +11,11 @@ from decimal import Decimal
 import pytest
 
 from app.models.account import Account, AccountType
+from app.models.goal import GoalKind
 from app.models.household import Household
 from app.models.recurring import Cadence, RecurringSeries, SeriesStatus
 from app.models.transaction import Transaction
-from app.services import budgets, forecast
+from app.services import budgets, forecast, goals
 from app.services.categories import ensure_system_categories, system_category_id
 
 
@@ -220,3 +221,57 @@ def test_discretionary_spend_is_zero_with_no_budgets_at_all(db, household, accou
     ensure_system_categories(db)
     days = forecast.project(db, household.id, months=1, today=date(2026, 7, 1))
     assert all(d.contributions == [] for d in days)
+
+
+def test_can_i_afford_an_amount_that_empties_the_account(db, household, account):
+    result = forecast.can_i_afford(
+        db, household.id, Decimal("1200.00"), date(2026, 7, 5), months=1, today=date(2026, 7, 1)
+    )
+    # Emptying the account to exactly zero is not an overdraft — see Global
+    # Constraints deviation 4 for why this is >= 0, not > 0.
+    assert result.stays_non_negative is True
+    assert result.minimum_balance == Decimal("0.00")
+
+
+def test_can_i_afford_an_amount_larger_than_the_balance_goes_negative(db, household, account):
+    result = forecast.can_i_afford(
+        db, household.id, Decimal("1500.00"), date(2026, 7, 5), months=1, today=date(2026, 7, 1)
+    )
+    assert result.stays_non_negative is False
+    assert result.minimum_balance < 0
+
+
+def test_can_i_afford_returns_both_a_baseline_and_a_with_amount_series(db, household, account):
+    result = forecast.can_i_afford(
+        db, household.id, Decimal("100.00"), date(2026, 7, 5), months=1, today=date(2026, 7, 1)
+    )
+    assert len(result.baseline) == len(result.with_amount)
+    baseline_day5 = next(d for d in result.baseline if d.on == date(2026, 7, 5))
+    with_day5 = next(d for d in result.with_amount if d.on == date(2026, 7, 5))
+    assert with_day5.projected_balance == baseline_day5.projected_balance - Decimal("100.00")
+
+
+def test_can_i_afford_reports_impact_on_each_active_goal(db, household, account):
+    goal = goals.create(
+        db, household.id, name="Vacation", kind=GoalKind.savings,
+        target_amount=Decimal("5000.00"), account_ids=[account.id],
+    )
+    result = forecast.can_i_afford(
+        db, household.id, Decimal("100.00"), date(2026, 7, 5), months=12, today=date(2026, 7, 1)
+    )
+    impact = next(g for g in result.goal_impact if g.goal_id == goal.id)
+    assert impact.goal_name == "Vacation"
+
+
+def test_can_i_afford_ignores_archived_goals(db, household, account):
+    from app.schemas.goal import GoalUpdate
+
+    goal = goals.create(
+        db, household.id, name="Old Goal", kind=GoalKind.savings,
+        target_amount=Decimal("100.00"), account_ids=[account.id],
+    )
+    goals.update(db, household.id, goal.id, GoalUpdate(status="archived"))
+    result = forecast.can_i_afford(
+        db, household.id, Decimal("100.00"), date(2026, 7, 5), months=1, today=date(2026, 7, 1)
+    )
+    assert all(g.goal_id != goal.id for g in result.goal_impact)

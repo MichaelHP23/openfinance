@@ -5,6 +5,7 @@ typed in by hand — never a model's guess. No strategy engine, no simulation: t
 list (avalanche/snowball, Monte Carlo, retirement projection) stays cut here.
 """
 
+import math
 import uuid
 from calendar import monthrange
 from dataclasses import dataclass, field
@@ -15,8 +16,9 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models.account import Account, AccountType
+from app.models.goal import Goal, GoalStatus
 from app.models.recurring import Cadence, RecurringSeries, SeriesStatus
-from app.services import budgets, recurring
+from app.services import budgets, goals, recurring
 
 # Balances a household can actually spend from. Net worth (services/snapshots.py,
 # already shipped) already answers "what's my whole balance sheet" — this answers
@@ -183,3 +185,104 @@ def project(
         d += timedelta(days=1)
 
     return out
+
+
+def _goal_date_from_series(
+    db: Session,
+    household_id: uuid.UUID,
+    goal: Goal,
+    series: list[ForecastDay],
+    today: date,
+) -> date | None:
+    """The date `goal` is reached, given a computed forecast `series` for the
+    "use the forecast's surplus" case, or a fixed monthly_funding rate for the case
+    the user typed one in by hand. Shared by can_i_afford (comparing baseline vs.
+    with-amount) and goal_projection (Task 7)."""
+    progress = goals.progress_for(db, household_id, goal)
+    remaining = goal.target_amount - progress
+    if remaining <= 0:
+        return today  # already met
+
+    if goal.monthly_funding:
+        # A funding rate the user typed in is a monthly commitment, not a slice of
+        # the household's whole cash flow — walk in fixed monthly increments rather
+        # than the daily series.
+        cursor = today
+        remaining_after = remaining
+        guard = 0
+        while remaining_after > 0:
+            cursor = _add_months(cursor, 1)
+            remaining_after -= goal.monthly_funding
+            guard += 1
+            if guard > 1200:  # 100 years; a funding rate too small to ever finish
+                return None
+        return cursor
+
+    if len(series) < 2:
+        return None
+    delta = series[-1].projected_balance - series[0].projected_balance
+    if delta <= 0:
+        return None
+    total_days = (series[-1].on - series[0].on).days
+    daily_rate = delta / Decimal(total_days)
+    days_needed = remaining / daily_rate
+    return today + timedelta(days=math.ceil(days_needed))
+
+
+@dataclass
+class GoalAffordability:
+    goal_id: uuid.UUID
+    goal_name: str
+    baseline_date: date | None
+    with_amount_date: date | None
+
+
+@dataclass
+class AffordabilityResult:
+    baseline: list[ForecastDay]
+    with_amount: list[ForecastDay]
+    stays_non_negative: bool
+    minimum_balance: Decimal
+    goal_impact: list[GoalAffordability]
+
+
+def can_i_afford(
+    db: Session,
+    household_id: uuid.UUID,
+    amount: Decimal,
+    on_date: date,
+    months: int,
+    *,
+    today: date | None = None,
+) -> AffordabilityResult:
+    """Runs project() twice — with and without the hypothetical outflow — so every
+    number on the "can I afford this" screen traces to the same walk the forecast
+    chart already draws, rather than a separate estimate."""
+    today = today or datetime.now(UTC).date()
+    baseline = project(db, household_id, months, today=today)
+    outflow = Hypothetical(amount=-abs(amount), on_date=on_date, label="Hypothetical purchase")
+    with_amount = project(db, household_id, months, [outflow], today=today)
+
+    minimum_balance = min(
+        (day.projected_balance for day in with_amount), default=Decimal(0)
+    )
+    stays_non_negative = minimum_balance >= 0
+
+    goal_impact = [
+        GoalAffordability(
+            goal_id=g.id,
+            goal_name=g.name,
+            baseline_date=_goal_date_from_series(db, household_id, g, baseline, today),
+            with_amount_date=_goal_date_from_series(db, household_id, g, with_amount, today),
+        )
+        for g in goals.list_for(db, household_id)
+        if g.status == GoalStatus.active
+    ]
+
+    return AffordabilityResult(
+        baseline=baseline,
+        with_amount=with_amount,
+        stays_non_negative=stays_non_negative,
+        minimum_balance=minimum_balance,
+        goal_impact=goal_impact,
+    )
