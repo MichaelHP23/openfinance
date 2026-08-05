@@ -1,0 +1,146 @@
+"""The AI advisor's tool registry.
+
+Every tool here is a thin, read-only wrapper over a service function that already
+existed before P4 — nothing in this module writes to the database, and nothing takes
+raw SQL. `ALLOWED_TOOLS` is the allowlist tests/test_advisor_tools.py asserts the
+registry against, so a mutation function can never quietly become reachable from the
+model by being added to `_REGISTRY` under a plausible-sounding name.
+
+Money in a tool result is a rounded float, not a Decimal — the same one-way,
+read-only exception services/digest.py already made for the LLM's JSON payload (see
+Global Constraints in this plan's own document for why that isn't a violation of
+"money is Decimal, never float").
+"""
+
+import uuid
+from typing import Any, Literal
+
+from pydantic import BaseModel, Field, ValidationError
+from sqlalchemy.orm import Session
+
+from app.models.recurring import SeriesStatus
+from app.services import portfolio as portfolio_service
+from app.services import recurring as recurring_service
+from app.services.snapshots import net_worth_series
+
+
+def _money(value: Any) -> float:
+    return round(float(value), 2)
+
+
+class NetWorthHistoryArgs(BaseModel):
+    months: int = Field(default=6, ge=1, le=60)
+
+
+def _net_worth_history(
+    db: Session, household_id: uuid.UUID, args: NetWorthHistoryArgs
+) -> dict[str, Any]:
+    points = net_worth_series(db, household_id, days=args.months * 30)
+    return {
+        "points": [
+            {
+                "on": p.on.isoformat(),
+                "assets": _money(p.assets),
+                "debts": _money(p.debts),
+                "net": _money(p.net),
+            }
+            for p in points
+        ]
+    }
+
+
+class HoldingsSummaryArgs(BaseModel):
+    pass
+
+
+def _holdings_summary(
+    db: Session, household_id: uuid.UUID, args: HoldingsSummaryArgs
+) -> dict[str, Any]:
+    result = portfolio_service.holdings(db, household_id)
+    return {
+        "totals": {k: _money(v) for k, v in result.totals.items()},
+        "priced_through": result.priced_through.isoformat() if result.priced_through else None,
+        "holdings": [
+            {
+                "symbol": h.symbol,
+                "name": h.name,
+                "units": _money(h.units),
+                "market_value": _money(h.market_value) if h.market_value is not None else None,
+                "unrealized_pct": _money(h.unrealized_pct) if h.unrealized_pct is not None else None,
+                "share_pct": _money(h.share_pct) if h.share_pct is not None else None,
+            }
+            for h in result.holdings
+        ],
+    }
+
+
+class RecurringListArgs(BaseModel):
+    status: Literal["active", "ended", "cancelled", "ignored"] | None = None
+
+
+def _recurring_list(
+    db: Session, household_id: uuid.UUID, args: RecurringListArgs
+) -> dict[str, Any]:
+    status = SeriesStatus(args.status) if args.status else None
+    rows = recurring_service.list_for(db, household_id, status=status)
+    return {
+        "series": [
+            {
+                "label": s.label,
+                "cadence": s.cadence.value,
+                "status": s.status.value,
+                "direction": s.direction,
+                "typical_amount": _money(s.typical_amount),
+                "next_expected_on": s.next_expected_on.isoformat() if s.next_expected_on else None,
+                "confidence": s.confidence,
+            }
+            for s in rows
+        ]
+    }
+
+
+_DESCRIPTIONS: dict[str, str] = {
+    "net_worth_history": "Net worth (assets, debts, net) per recorded day over the trailing N months.",
+    "holdings_summary": "Current investment holdings: units, market value, unrealized gain, share of portfolio.",
+    "recurring_list": "Recurring charges and deposits, optionally filtered by status.",
+}
+
+# name -> (Pydantic argument schema, wrapper function). Order here is the order
+# TOOL_SPECS is presented to the model in.
+_REGISTRY: dict[str, tuple[type[BaseModel], Any]] = {
+    "net_worth_history": (NetWorthHistoryArgs, _net_worth_history),
+    "holdings_summary": (HoldingsSummaryArgs, _holdings_summary),
+    "recurring_list": (RecurringListArgs, _recurring_list),
+}
+
+ALLOWED_TOOLS: tuple[str, ...] = tuple(_REGISTRY.keys())
+
+
+def _spec_for(name: str, schema: type[BaseModel]) -> dict[str, Any]:
+    return {"name": name, "description": _DESCRIPTIONS[name], "input_schema": schema.model_json_schema()}
+
+
+TOOL_SPECS: list[dict[str, Any]] = [_spec_for(name, schema) for name, (schema, _fn) in _REGISTRY.items()]
+
+
+def run_tool(
+    name: str, raw_args: dict[str, Any], db: Session, household_id: uuid.UUID
+) -> dict[str, Any]:
+    """Validate and dispatch one tool call. Never raises: an unknown name, invalid
+    arguments, or a wrapper's own bug all become an `{"error": ...}` result the model
+    sees, so one failing tool call cannot kill the whole turn."""
+    entry = _REGISTRY.get(name)
+    if entry is None:
+        return {"error": f"unknown tool: {name}"}
+
+    schema, fn = entry
+    try:
+        args = schema.model_validate(raw_args)
+    except ValidationError as exc:
+        return {"error": f"invalid arguments: {exc}"}
+
+    try:
+        result: dict[str, Any] = fn(db, household_id, args)
+        return result
+    except Exception as exc:  # noqa: BLE001 - a tool's own bug must not kill the turn
+        return {"error": f"{name} failed: {exc}"}
