@@ -1,3 +1,4 @@
+import uuid
 from datetime import date
 from decimal import Decimal
 
@@ -7,6 +8,8 @@ from sqlalchemy import select
 from app.models.account import Account, AccountType
 from app.models.goal import Goal, GoalAccount, GoalKind, GoalStatus
 from app.models.household import Household
+from app.schemas.goal import GoalUpdate
+from app.services import goals
 
 
 @pytest.fixture
@@ -100,3 +103,116 @@ def test_target_date_and_monthly_funding_are_optional(db, household):
     db.refresh(row)
     assert row.target_date == date(2027, 6, 1)
     assert row.monthly_funding == Decimal("300.0000")
+
+
+def test_create_creates_a_goal_with_no_linked_accounts(db, household):
+    row = goals.create(
+        db, household.id, name="Emergency Fund", kind=GoalKind.savings,
+        target_amount=Decimal("5000.00"),
+    )
+    assert row.id is not None
+    assert goals.linked_account_ids(db, household.id, row.id) == []
+
+
+def test_create_links_the_given_accounts(db, household, account):
+    row = goals.create(
+        db, household.id, name="Fund", kind=GoalKind.savings,
+        target_amount=Decimal("100"), account_ids=[account.id],
+    )
+    assert goals.linked_account_ids(db, household.id, row.id) == [account.id]
+
+
+def test_create_rejects_an_account_the_household_cannot_see(db, household):
+    other = Household(name="Other Household")
+    db.add(other)
+    db.commit()
+    theirs = Account(household_id=other.id, type=AccountType.checking, name="Theirs")
+    db.add(theirs)
+    db.commit()
+    with pytest.raises(goals.UnknownAccount):
+        goals.create(
+            db, household.id, name="Fund", kind=GoalKind.savings,
+            target_amount=Decimal("100"), account_ids=[theirs.id],
+        )
+
+
+def test_list_for_only_returns_this_households_goals(db, household):
+    other = Household(name="Other Household")
+    db.add(other)
+    db.commit()
+    goals.create(db, household.id, name="Mine", kind=GoalKind.savings, target_amount=Decimal("1"))
+    goals.create(db, other.id, name="Theirs", kind=GoalKind.savings, target_amount=Decimal("1"))
+    assert {g.name for g in goals.list_for(db, household.id)} == {"Mine"}
+
+
+def test_get_returns_none_for_a_foreign_goal(db, household):
+    other = Household(name="Other Household")
+    db.add(other)
+    db.commit()
+    theirs = goals.create(
+        db, other.id, name="Theirs", kind=GoalKind.savings, target_amount=Decimal("1")
+    )
+    assert goals.get(db, household.id, theirs.id) is None
+
+
+def test_update_changes_fields_and_replaces_linked_accounts(db, household, account):
+    row = goals.create(
+        db, household.id, name="Fund", kind=GoalKind.savings,
+        target_amount=Decimal("100"), account_ids=[account.id],
+    )
+    other_account = Account(household_id=household.id, type=AccountType.checking, name="Other")
+    db.add(other_account)
+    db.commit()
+
+    updated = goals.update(
+        db, household.id, row.id, GoalUpdate(name="Renamed", account_ids=[other_account.id])
+    )
+    assert updated.name == "Renamed"
+    assert goals.linked_account_ids(db, household.id, row.id) == [other_account.id]
+
+
+def test_update_rejects_an_unknown_account(db, household, account):
+    row = goals.create(
+        db, household.id, name="Fund", kind=GoalKind.savings,
+        target_amount=Decimal("100"), account_ids=[account.id],
+    )
+    with pytest.raises(goals.UnknownAccount):
+        goals.update(db, household.id, row.id, GoalUpdate(account_ids=[uuid.uuid4()]))
+
+
+def test_update_returns_none_for_a_foreign_goal(db, household):
+    other = Household(name="Other Household")
+    db.add(other)
+    db.commit()
+    theirs = goals.create(
+        db, other.id, name="Theirs", kind=GoalKind.savings, target_amount=Decimal("1")
+    )
+    assert goals.update(db, household.id, theirs.id, GoalUpdate(name="Hijacked")) is None
+
+
+def test_update_leaves_account_links_alone_when_not_provided(db, household, account):
+    row = goals.create(
+        db, household.id, name="Fund", kind=GoalKind.savings,
+        target_amount=Decimal("100"), account_ids=[account.id],
+    )
+    goals.update(db, household.id, row.id, GoalUpdate(name="Renamed Only"))
+    assert goals.linked_account_ids(db, household.id, row.id) == [account.id]
+
+
+def test_delete_removes_the_goal_and_its_links(db, household, account):
+    row = goals.create(
+        db, household.id, name="Fund", kind=GoalKind.savings,
+        target_amount=Decimal("100"), account_ids=[account.id],
+    )
+    assert goals.delete(db, household.id, row.id) is True
+    assert goals.get(db, household.id, row.id) is None
+
+
+def test_delete_returns_false_for_a_foreign_goal(db, household):
+    other = Household(name="Other Household")
+    db.add(other)
+    db.commit()
+    theirs = goals.create(
+        db, other.id, name="Theirs", kind=GoalKind.savings, target_amount=Decimal("1")
+    )
+    assert goals.delete(db, household.id, theirs.id) is False
