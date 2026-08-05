@@ -216,3 +216,49 @@ def test_delete_returns_false_for_a_foreign_goal(db, household):
         db, other.id, name="Theirs", kind=GoalKind.savings, target_amount=Decimal("1")
     )
     assert goals.delete(db, household.id, theirs.id) is False
+
+
+def test_progress_for_savings_is_the_summed_linked_balance(db, household):
+    a1 = Account(household_id=household.id, type=AccountType.savings, name="A1", balance=Decimal("300.00"))
+    a2 = Account(household_id=household.id, type=AccountType.checking, name="A2", balance=Decimal("150.00"))
+    db.add_all([a1, a2])
+    db.commit()
+    goal = goals.create(
+        db, household.id, name="Fund", kind=GoalKind.savings,
+        target_amount=Decimal("1000"), account_ids=[a1.id, a2.id],
+    )
+    assert goals.progress_for(db, household.id, goal) == Decimal("450.00")
+
+
+def test_progress_for_debt_payoff_is_the_amount_paid_down_from_target(db, household):
+    loan = Account(household_id=household.id, type=AccountType.loan, name="Car Loan", balance=Decimal("-7000.00"))
+    db.add(loan)
+    db.commit()
+    goal = goals.create(
+        db, household.id, name="Payoff", kind=GoalKind.debt_payoff,
+        target_amount=Decimal("10000.00"), account_ids=[loan.id],
+    )
+    # target_amount is read as the original 10000.00 owed; 7000.00 remains, so
+    # 3000.00 has been paid down.
+    assert goals.progress_for(db, household.id, goal) == Decimal("3000.00")
+
+
+def test_progress_for_debt_payoff_handles_a_positive_stored_balance_too(db, household):
+    # Some providers store a liability balance as a positive "amount owed" rather
+    # than a negative one — progress_for takes the absolute value either way, the
+    # same defensive stance services/snapshots.py already takes for net worth.
+    loan = Account(household_id=household.id, type=AccountType.loan, name="Car Loan", balance=Decimal("7000.00"))
+    db.add(loan)
+    db.commit()
+    goal = goals.create(
+        db, household.id, name="Payoff", kind=GoalKind.debt_payoff,
+        target_amount=Decimal("10000.00"), account_ids=[loan.id],
+    )
+    assert goals.progress_for(db, household.id, goal) == Decimal("3000.00")
+
+
+def test_progress_for_a_goal_with_no_linked_accounts_is_zero_for_either_kind(db, household):
+    savings_goal = goals.create(db, household.id, name="S", kind=GoalKind.savings, target_amount=Decimal("500"))
+    debt_goal = goals.create(db, household.id, name="D", kind=GoalKind.debt_payoff, target_amount=Decimal("500"))
+    assert goals.progress_for(db, household.id, savings_goal) == Decimal("0")
+    assert goals.progress_for(db, household.id, debt_goal) == Decimal("0")
