@@ -5,6 +5,7 @@ Task 4's tests below do not create a Budget row and do not import app.services.b
 — see the STOP section at the top of this plan for why that boundary matters.
 """
 
+import uuid
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 
@@ -275,3 +276,65 @@ def test_can_i_afford_ignores_archived_goals(db, household, account):
         db, household.id, Decimal("100.00"), date(2026, 7, 5), months=1, today=date(2026, 7, 1)
     )
     assert all(g.goal_id != goal.id for g in result.goal_impact)
+
+
+def test_goal_projection_uses_monthly_funding_when_set(db, household):
+    acct = Account(household_id=household.id, type=AccountType.savings, name="Fund Acct", balance=Decimal("200.00"))
+    db.add(acct)
+    db.commit()
+    goal = goals.create(
+        db, household.id, name="Fund", kind=GoalKind.savings,
+        target_amount=Decimal("1200.00"), monthly_funding=Decimal("500.00"), account_ids=[acct.id],
+    )
+    projected = forecast.goal_projection(db, household.id, goal.id, today=date(2026, 7, 1))
+    # remaining = 1200 - 200 = 1000; at 500/month that's 2 months -> Sep 1.
+    assert projected == date(2026, 9, 1)
+
+
+def test_goal_projection_uses_the_forecast_surplus_when_monthly_funding_is_null(db, household):
+    acct = Account(household_id=household.id, type=AccountType.checking, name="Fund Acct", balance=Decimal("0.00"))
+    db.add(acct)
+    db.commit()
+    # A steady 1000.00/month paycheck as the only cash flow gives the forecast a
+    # known, checkable surplus rate to project the goal against.
+    _series(
+        db, household, acct, cadence=Cadence.monthly,
+        next_expected_on=date(2026, 7, 1), typical_amount=Decimal("1000.00"), direction=1,
+        label="Paycheck",
+    )
+    goal = goals.create(
+        db, household.id, name="Fund", kind=GoalKind.savings,
+        target_amount=Decimal("3000.00"), account_ids=[acct.id],
+    )
+    projected = forecast.goal_projection(db, household.id, goal.id, months=12, today=date(2026, 7, 1))
+    assert projected is not None
+
+
+def test_goal_projection_raises_for_an_unknown_goal(db, household):
+    with pytest.raises(forecast.UnknownGoal):
+        forecast.goal_projection(db, household.id, uuid.uuid4())
+
+
+def test_goal_projection_is_today_when_the_target_is_already_met(db, household):
+    acct = Account(household_id=household.id, type=AccountType.savings, name="Fund Acct", balance=Decimal("5000.00"))
+    db.add(acct)
+    db.commit()
+    goal = goals.create(
+        db, household.id, name="Fund", kind=GoalKind.savings,
+        target_amount=Decimal("1000.00"), account_ids=[acct.id],
+    )
+    assert forecast.goal_projection(db, household.id, goal.id, today=date(2026, 7, 1)) == date(2026, 7, 1)
+
+
+def test_goals_overview_pairs_progress_with_projected_date_for_every_goal(db, household):
+    acct = Account(household_id=household.id, type=AccountType.savings, name="Fund Acct", balance=Decimal("500.00"))
+    db.add(acct)
+    db.commit()
+    goal = goals.create(
+        db, household.id, name="Fund", kind=GoalKind.savings,
+        target_amount=Decimal("1000.00"), monthly_funding=Decimal("250.00"), account_ids=[acct.id],
+    )
+    overview = forecast.goals_overview(db, household.id, today=date(2026, 7, 1))
+    row = next(o for o in overview if o.goal_id == goal.id)
+    assert row.progress == Decimal("500.00")
+    assert row.projected_date == date(2026, 9, 1)  # remaining 500 / 250 per month = 2 months

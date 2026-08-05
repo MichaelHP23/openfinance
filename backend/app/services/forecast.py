@@ -286,3 +286,50 @@ def can_i_afford(
         minimum_balance=minimum_balance,
         goal_impact=goal_impact,
     )
+
+
+class UnknownGoal(Exception):
+    """The requested goal does not exist, or belongs to another household."""
+
+
+def goal_projection(
+    db: Session,
+    household_id: uuid.UUID,
+    goal_id: uuid.UUID,
+    *,
+    months: int = 12,
+    today: date | None = None,
+) -> date | None:
+    """The date `goal_id` is reached at current funding — the forecast's own
+    surplus when monthly_funding is null, per the spec."""
+    goal = goals.get(db, household_id, goal_id)
+    if goal is None:
+        raise UnknownGoal(str(goal_id))
+    today = today or datetime.now(UTC).date()
+    series = project(db, household_id, months, today=today)
+    return _goal_date_from_series(db, household_id, goal, series, today)
+
+
+@dataclass
+class GoalOverview:
+    goal_id: uuid.UUID
+    progress: Decimal
+    projected_date: date | None
+
+
+def goals_overview(
+    db: Session, household_id: uuid.UUID, *, months: int = 12, today: date | None = None
+) -> list[GoalOverview]:
+    """Progress and a projected completion date for every goal, computed from one
+    shared project() call rather than one per goal — the walk is identical
+    regardless of which goal is asking."""
+    today = today or datetime.now(UTC).date()
+    series = project(db, household_id, months, today=today)
+    return [
+        GoalOverview(
+            goal_id=g.id,
+            progress=goals.progress_for(db, household_id, g),
+            projected_date=_goal_date_from_series(db, household_id, g, series, today),
+        )
+        for g in goals.list_for(db, household_id)
+    ]
