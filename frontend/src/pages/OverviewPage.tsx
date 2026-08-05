@@ -4,6 +4,7 @@ import { TxnRows } from "../transactions";
 import { monthlySeries, monthTotals, netWorth, topMerchants, usd, usdCompact } from "../money";
 import { Assistant, NetWorthChart } from "../insights";
 import { Card, Empty, PageHead } from "../ui/Shell";
+import { ForecastChart } from "../ForecastChart";
 
 const NOW = new Date();
 const THIS_MONTH = `${NOW.getFullYear()}-${String(NOW.getMonth() + 1).padStart(2, "0")}`;
@@ -69,6 +70,8 @@ export function OverviewPage() {
         </div>
         <NetWorthChart points={history} />
       </Card>
+
+      <ForecastChart />
 
       <div className="grid gap-4 lg:grid-cols-[3fr_2fr]">
         <Card delay={120}>
