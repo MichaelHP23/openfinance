@@ -26,3 +26,16 @@ class GoalUpdate(BaseModel):
     monthly_funding: Decimal | None = Field(default=None, ge=0)
     status: GoalStatus | None = None
     account_ids: list[uuid.UUID] | None = None
+
+
+class GoalOut(BaseModel):
+    id: uuid.UUID
+    name: str
+    kind: GoalKind
+    target_amount: Decimal
+    target_date: date | None
+    monthly_funding: Decimal | None
+    status: GoalStatus
+    account_ids: list[uuid.UUID]
+    progress: Decimal
+    projected_date: date | None
