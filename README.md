@@ -76,6 +76,12 @@ npm run lint
   from history every time it's shown and nothing is ever written for it, so switching
   rollover off can't corrupt a number you already saved. Suggest fills in a trailing
   3-month median, rounded to the nearest 5 — no model involved.
+- **Goals** — savings and debt-payoff targets, linked to the real accounts that fund
+  them; progress is always today's actual balance, never a separate ledger that can
+  drift from it. A cash-flow forecast on Overview projects forward from today's
+  balances, your recurring bills, and this month's budget — with a "can I afford…"
+  check that shows what a hypothetical purchase does to the projection and to every
+  active goal's date.
 - Local mode (no login) or full email/password auth: argon2id, server-side sessions,
   rate limits.
 - `BankProvider` protocol with a `ManualProvider`; credentials sealed with AES-GCM

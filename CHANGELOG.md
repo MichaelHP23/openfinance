@@ -2,6 +2,24 @@
 
 ## [Unreleased] — Origin parity program
 
+## P3 (goals and cash-flow forecast) — on its own branch, not yet merged
+
+### Added
+- `goals` and `goal_accounts` tables: a savings or debt-payoff target and the
+  accounts whose balances count toward it. No contributions ledger — progress is
+  always the linked accounts' current balance, sign-flipped for debt payoff.
+- `services/forecast.py::project` — a daily balance walk from today's cash accounts,
+  applying every active recurring series' cadence and the current month's uncovered
+  budget spread evenly, plus any hypothetical passed in.
+- `can_i_afford`: runs the forecast twice, with and without a hypothetical outflow,
+  and reports whether the balance would go negative and what it does to every active
+  goal's projected date.
+- `GET/POST /goals`, `PATCH/DELETE /goals/{id}`, `GET /forecast?months=`,
+  `POST /forecast/afford`.
+- Frontend: a Goals page with progress rings and a projected date per goal; a
+  forecast chart on Overview with a negative-balance marker and a "can I
+  afford…" input.
+
 P1 (categorization) is complete on the `p1-categorization` branch. Nothing has merged to
 `main` yet.
 
