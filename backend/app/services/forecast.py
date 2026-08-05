@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 
 from app.models.account import Account, AccountType
 from app.models.recurring import Cadence, RecurringSeries, SeriesStatus
-from app.services import recurring
+from app.services import budgets, recurring
 
 # Balances a household can actually spend from. Net worth (services/snapshots.py,
 # already shipped) already answers "what's my whole balance sheet" — this answers
@@ -73,6 +73,20 @@ def _cash_balance(db: Session, household_id: uuid.UUID) -> Decimal:
     return sum(rows, Decimal(0))
 
 
+def _recurring_covered_categories(db: Session, household_id: uuid.UUID) -> set[uuid.UUID]:
+    """Category ids already accounted for by an active recurring series, so this
+    doesn't double-count a subscription as both a recurring line and discretionary
+    spend. RecurringSeries carries no category of its own, so this is built from the
+    transactions each series already matches — exactly as expensive as
+    recurring.charges() already is anywhere else it's called."""
+    covered: set[uuid.UUID] = set()
+    for series in recurring.list_for(db, household_id, status=SeriesStatus.active):
+        for txn in recurring.charges(db, household_id, series):
+            if txn.category_id is not None:
+                covered.add(txn.category_id)
+    return covered
+
+
 @dataclass
 class Hypothetical:
     amount: Decimal  # negative for an outflow, positive for an inflow
@@ -100,9 +114,8 @@ def project(
     1. Starts at today's summed cash-account balances.
     2. Walks forward day by day, applying every active RecurringSeries whose cadence
        lands on that day.
-    3. Discretionary spend is zero here — Task 5 wires in the real budgeted-spend
-       computation; until then the walk only reflects recurring cadences and
-       whatever hypotheticals are passed in.
+    3. Spreads the current month's budgeted-but-not-recurring-covered spend evenly
+       across every day of the horizon (see `_recurring_covered_categories`).
     4. Applies any hypothetical outflows/inflows on their exact date.
     5. Every day's `contributions` names what moved it, so any point on the
        resulting chart is explainable back to a real row.
@@ -119,7 +132,24 @@ def project(
         if s.next_expected_on is not None
     }
 
-    daily_discretionary = Decimal(0)
+    # The current month's budgeted total for categories no recurring series already
+    # covers, spread over that month's day count — held constant for the whole
+    # horizon. See Global Constraints deviation 5 for why this isn't recomputed
+    # per future calendar month.
+    covered = _recurring_covered_categories(db, household_id)
+    month_start = today.replace(day=1)
+    days_in_month = monthrange(today.year, today.month)[1]
+    discretionary_total = sum(
+        (
+            row.budgeted
+            for row in budgets.status(db, household_id, month_start)
+            if row.category_id not in covered
+        ),
+        Decimal(0),
+    )
+    daily_discretionary = (
+        discretionary_total / days_in_month if discretionary_total else Decimal(0)
+    )
 
     by_date: dict[date, list[Hypothetical]] = {}
     for h in hypotheticals:

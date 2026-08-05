@@ -13,7 +13,9 @@ import pytest
 from app.models.account import Account, AccountType
 from app.models.household import Household
 from app.models.recurring import Cadence, RecurringSeries, SeriesStatus
-from app.services import forecast
+from app.models.transaction import Transaction
+from app.services import budgets, forecast
+from app.services.categories import ensure_system_categories, system_category_id
 
 
 @pytest.fixture
@@ -173,3 +175,48 @@ def test_a_hypothetical_applies_on_its_exact_date_and_nowhere_else(db, household
     assert on_day.projected_balance == Decimal("700.00")
     assert after.projected_balance == Decimal("700.00")
     assert on_day.contributions == ["New couch -500.00"]
+
+
+def test_discretionary_spend_is_the_current_months_uncovered_budget_spread_evenly(db, household, account):
+    ensure_system_categories(db)
+    groceries = system_category_id("Food & Drink/Groceries")
+    streaming = system_category_id("Bills & Utilities/Streaming")
+    today = date(2026, 7, 1)  # July has 31 days
+
+    budgets.upsert(
+        db, household.id, today,
+        [
+            budgets.BudgetItem(groceries, Decimal("310.00")),
+            budgets.BudgetItem(streaming, Decimal("15.00")),
+        ],
+    )
+
+    # A recurring series whose actual charge landed in Streaming — its budget should
+    # be treated as already accounted for by the recurring line, not double-counted
+    # as discretionary spend too.
+    _series(
+        db, household, account, cadence=Cadence.monthly,
+        next_expected_on=date(2026, 8, 1), typical_amount=Decimal("15.00"), direction=-1,
+        label="Streamer",
+    )
+    db.add(
+        Transaction(
+            household_id=household.id, account_id=account.id,
+            posted_at=datetime(2026, 6, 15, tzinfo=UTC), amount=Decimal("-15.00"),
+            merchant_raw="Streamer", category_id=streaming,
+        )
+    )
+    db.commit()
+
+    days = forecast.project(db, household.id, months=1, today=today)
+    discretionary_lines = [c for d in days for c in d.contributions if c.startswith("Discretionary")]
+    # Only Groceries' 310.00 counts (Streaming is covered), spread over July's 31 days.
+    daily = Decimal("310.00") / 31
+    assert len(discretionary_lines) == len(days)  # applied every single day
+    assert discretionary_lines[0] == f"Discretionary spend -{daily:.2f}"
+
+
+def test_discretionary_spend_is_zero_with_no_budgets_at_all(db, household, account):
+    ensure_system_categories(db)
+    days = forecast.project(db, household.id, months=1, today=date(2026, 7, 1))
+    assert all(d.contributions == [] for d in days)
