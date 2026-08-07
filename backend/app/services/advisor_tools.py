@@ -13,14 +13,19 @@ Global Constraints in this plan's own document for why that isn't a violation of
 """
 
 import uuid
+from collections import defaultdict
+from datetime import UTC, date, datetime
+from decimal import Decimal
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field, ValidationError
 from sqlalchemy.orm import Session
 
 from app.models.recurring import SeriesStatus
+from app.services import categories as categories_service
 from app.services import portfolio as portfolio_service
 from app.services import recurring as recurring_service
+from app.services import transactions as transactions_service
 from app.services.snapshots import net_worth_series
 
 
@@ -99,10 +104,101 @@ def _recurring_list(
     }
 
 
+class SpendByCategoryArgs(BaseModel):
+    start: date
+    end: date
+    group_by: Literal["category", "month"] = "category"
+
+
+def _spend_by_category(
+    db: Session, household_id: uuid.UUID, args: SpendByCategoryArgs
+) -> dict[str, Any]:
+    since = datetime.combine(args.start, datetime.min.time(), tzinfo=UTC)
+    until = datetime.combine(args.end, datetime.max.time(), tzinfo=UTC)
+    txns = transactions_service.list_for(db, household_id, since=since, until=until)
+    spend = [t for t in txns if t.amount < 0]
+
+    if args.group_by == "month":
+        totals: dict[str, Decimal] = defaultdict(lambda: Decimal(0))
+        for t in spend:
+            totals[t.posted_at.strftime("%Y-%m")] += -t.amount
+        ranked = sorted(totals.items())
+        return {"by": "month", "totals": [{"key": k, "amount": _money(v)} for k, v in ranked]}
+
+    names: dict[uuid.UUID | None, str] = {
+        c.id: c.name for c in categories_service.list_for(db, household_id)
+    }
+    by_name: dict[str, Decimal] = defaultdict(lambda: Decimal(0))
+    for t in spend:
+        label = names.get(t.category_id, "Uncategorized")
+        by_name[label] += -t.amount
+    ranked = sorted(by_name.items(), key=lambda kv: kv[1], reverse=True)
+    return {"by": "category", "totals": [{"key": k, "amount": _money(v)} for k, v in ranked]}
+
+
+class TransactionSearchArgs(BaseModel):
+    merchant: str | None = None
+    category: str | None = None
+    min_amount: Decimal | None = None
+    max_amount: Decimal | None = None
+    start: date | None = None
+    end: date | None = None
+    limit: int = Field(default=20, ge=1, le=50)
+
+
+def _transaction_search(
+    db: Session, household_id: uuid.UUID, args: TransactionSearchArgs
+) -> dict[str, Any]:
+    """The only tool that returns individual transactions, and the only one capped
+    below the household's whole history — 50 rows, per the spec. `merchant` reuses
+    transactions.list_for's own `search` filter (an ilike over merchant_raw), which is
+    P1's, not extended here; category, amount, and the row cap are applied on top
+    since list_for doesn't support them."""
+    since = datetime.combine(args.start, datetime.min.time(), tzinfo=UTC) if args.start else None
+    until = datetime.combine(args.end, datetime.max.time(), tzinfo=UTC) if args.end else None
+    txns = transactions_service.list_for(
+        db, household_id, since=since, until=until, search=args.merchant
+    )
+
+    if args.category:
+        wanted = next(
+            (
+                c.id
+                for c in categories_service.list_for(db, household_id)
+                if c.name.lower() == args.category.lower()
+            ),
+            None,
+        )
+        txns = [t for t in txns if t.category_id == wanted] if wanted else []
+    if args.min_amount is not None:
+        txns = [t for t in txns if t.amount >= args.min_amount]
+    if args.max_amount is not None:
+        txns = [t for t in txns if t.amount <= args.max_amount]
+
+    rows = txns[: args.limit]
+    return {
+        "count": len(rows),
+        "transactions": [
+            {
+                "date": t.posted_at.date().isoformat(),
+                "merchant": t.merchant_normalized or t.merchant_raw,
+                "amount": _money(t.amount),
+            }
+            for t in rows
+        ],
+    }
+
+
 _DESCRIPTIONS: dict[str, str] = {
     "net_worth_history": "Net worth (assets, debts, net) per recorded day over the trailing N months.",
     "holdings_summary": "Current investment holdings: units, market value, unrealized gain, share of portfolio.",
     "recurring_list": "Recurring charges and deposits, optionally filtered by status.",
+    "spend_by_category": "Total spending in a date range, grouped by category or by month. Aggregates only.",
+    "transaction_search": (
+        "Search individual transactions by merchant, category, amount range, and date "
+        "range. Returns at most 50 rows — the only tool that returns individual "
+        "transactions; everything else here returns aggregates."
+    ),
 }
 
 # name -> (Pydantic argument schema, wrapper function). Order here is the order
@@ -111,6 +207,8 @@ _REGISTRY: dict[str, tuple[type[BaseModel], Any]] = {
     "net_worth_history": (NetWorthHistoryArgs, _net_worth_history),
     "holdings_summary": (HoldingsSummaryArgs, _holdings_summary),
     "recurring_list": (RecurringListArgs, _recurring_list),
+    "spend_by_category": (SpendByCategoryArgs, _spend_by_category),
+    "transaction_search": (TransactionSearchArgs, _transaction_search),
 }
 
 ALLOWED_TOOLS: tuple[str, ...] = tuple(_REGISTRY.keys())

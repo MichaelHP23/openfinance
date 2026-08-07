@@ -108,3 +108,104 @@ def test_registry_contains_no_mutating_service_function():
     }
     registered_fns = {fn for _schema, fn in advisor_tools._REGISTRY.values()}
     assert registered_fns.isdisjoint(forbidden)
+
+
+from app.schemas.transaction import TxnCreate
+
+
+def _txn(db, household, account, merchant: str, amount: str, on: str = "2026-07-15"):
+    return transactions_service.create(
+        db,
+        household.id,
+        TxnCreate(
+            account_id=account.id,
+            posted_at=datetime.fromisoformat(f"{on}T00:00:00+00:00"),
+            amount=Decimal(amount),
+            merchant_raw=merchant,
+        ),
+    )
+
+
+def test_spend_by_category_groups_uncategorized_spend_together(db, household, account):
+    _txn(db, household, account, "Corner Store", "-25.00")
+    _txn(db, household, account, "Corner Store", "-15.00")
+    result = advisor_tools.run_tool(
+        "spend_by_category",
+        {"start": "2026-07-01", "end": "2026-07-31", "group_by": "category"},
+        db,
+        household.id,
+    )
+    assert result["by"] == "category"
+    assert result["totals"] == [{"key": "Uncategorized", "amount": 40.0}]
+
+
+def test_spend_by_category_ignores_income(db, household, account):
+    _txn(db, household, account, "Payroll", "3000.00")
+    _txn(db, household, account, "Rent", "-1200.00")
+    result = advisor_tools.run_tool(
+        "spend_by_category", {"start": "2026-07-01", "end": "2026-07-31"}, db, household.id
+    )
+    assert result["totals"] == [{"key": "Uncategorized", "amount": 1200.0}]
+
+
+def test_spend_by_category_can_group_by_month_instead(db, household, account):
+    _txn(db, household, account, "Rent", "-1200.00", on="2026-07-01")
+    _txn(db, household, account, "Rent", "-1200.00", on="2026-06-01")
+    result = advisor_tools.run_tool(
+        "spend_by_category",
+        {"start": "2026-06-01", "end": "2026-07-31", "group_by": "month"},
+        db,
+        household.id,
+    )
+    assert result["by"] == "month"
+    assert {t["key"]: t["amount"] for t in result["totals"]} == {"2026-06": 1200.0, "2026-07": 1200.0}
+
+
+def test_spend_by_category_rejects_an_end_before_start(db, household):
+    # start/end aren't cross-validated by the schema (Pydantic can't express "end >=
+    # start" as a field constraint without a model validator this tool doesn't need);
+    # an inverted range simply yields no rows rather than an error, which is exercised
+    # here so the behavior is pinned down rather than accidental.
+    result = advisor_tools.run_tool(
+        "spend_by_category", {"start": "2026-07-31", "end": "2026-07-01"}, db, household.id
+    )
+    assert result["totals"] == []
+
+
+def test_transaction_search_matches_by_merchant_substring(db, household, account):
+    _txn(db, household, account, "WHOLE FOODS #221", "-42.00")
+    _txn(db, household, account, "Netflix", "-15.99")
+    result = advisor_tools.run_tool("transaction_search", {"merchant": "whole"}, db, household.id)
+    assert result["count"] == 1
+    assert result["transactions"][0]["merchant"] == "WHOLE FOODS #221"
+
+
+def test_transaction_search_filters_by_amount_range(db, household, account):
+    _txn(db, household, account, "Big Purchase", "-500.00")
+    _txn(db, household, account, "Small Purchase", "-5.00")
+    result = advisor_tools.run_tool(
+        "transaction_search", {"min_amount": "-100.00", "max_amount": "0.00"}, db, household.id
+    )
+    assert [t["merchant"] for t in result["transactions"]] == ["Small Purchase"]
+
+
+def test_transaction_search_is_capped_at_50_rows_even_if_more_match(db, household, account):
+    for i in range(60):
+        _txn(db, household, account, f"Merchant {i}", "-1.00")
+    result = advisor_tools.run_tool("transaction_search", {"limit": 50}, db, household.id)
+    assert result["count"] == 50
+
+
+def test_transaction_search_rejects_a_limit_above_50(db, household):
+    result = advisor_tools.run_tool("transaction_search", {"limit": 51}, db, household.id)
+    assert "error" in result
+
+
+def test_registry_matches_the_allowlist_exactly_with_five_tools():
+    assert set(advisor_tools._REGISTRY.keys()) == {
+        "net_worth_history",
+        "holdings_summary",
+        "recurring_list",
+        "spend_by_category",
+        "transaction_search",
+    }
