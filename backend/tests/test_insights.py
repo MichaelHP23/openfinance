@@ -182,3 +182,87 @@ def test_claude_provider_without_a_key_reports_unavailable():
     assert provider.configured is False
     with pytest.raises(LLMError, match="ANTHROPIC_API_KEY"):
         provider.complete("system", "prompt")
+
+
+def test_ask_stops_at_the_tool_call_cap_with_a_note_not_an_error(db):
+    hid = _household(db)
+    _seed(db, hid)
+    # The model keeps asking for another tool call forever; the loop must cut it off
+    # at MAX_TOOL_CALLS rather than looping until the API bill notices.
+    replies = [
+        ProviderReply(
+            text="",
+            tool_calls=[ToolCall(id=f"t{i}", name="net_worth_history", input={"months": 1})],
+            stop_reason="tool_use",
+        )
+        for i in range(insights.MAX_TOOL_CALLS + 3)
+    ]
+    llm = ScriptedLLM(replies)
+    result = insights.ask(db, hid, question="?", provider=llm)
+    assert len(result.trace) == insights.MAX_TOOL_CALLS
+    assert "limit" in result.answer.lower()
+
+
+def test_ask_stops_at_the_wall_clock_cap_with_a_note_not_an_error(db, monkeypatch):
+    hid = _household(db)
+    _seed(db, hid)
+    # First call to time.monotonic() starts the clock; the second (inside the loop)
+    # is already 200 seconds later — past the 120-second budget — so the loop must
+    # return before ever calling the model.
+    times = iter([0.0, 200.0])
+    monkeypatch.setattr(insights.time, "monotonic", lambda: next(times))
+    llm = ScriptedLLM(
+        [ProviderReply(text="", tool_calls=[ToolCall(id="t1", name="net_worth_history", input={})], stop_reason="tool_use")]
+    )
+    result = insights.ask(db, hid, question="?", provider=llm)
+    assert result.trace == []
+    assert llm.calls == []
+    assert "time" in result.answer.lower() or "budget" in result.answer.lower()
+
+
+def test_a_tool_raising_does_not_kill_the_turn(db, monkeypatch):
+    from app.services import advisor_tools
+
+    hid = _household(db)
+    _seed(db, hid)
+
+    def boom(db, household_id, args):
+        raise RuntimeError("boom")
+
+    monkeypatch.setitem(
+        advisor_tools._REGISTRY, "net_worth_history", (advisor_tools.NetWorthHistoryArgs, boom)
+    )
+    llm = ScriptedLLM(
+        [
+            ProviderReply(
+                text="",
+                tool_calls=[ToolCall(id="t1", name="net_worth_history", input={"months": 1})],
+                stop_reason="tool_use",
+            ),
+            ProviderReply(text="## Where you stand\n- Couldn't check that.", stop_reason="end_turn"),
+        ]
+    )
+    result = insights.ask(db, hid, question="?", provider=llm)
+    assert result.answer == "## Where you stand\n- Couldn't check that."
+    assert "error" in result.trace[0].result_summary.lower()
+    assert "boom" in result.trace[0].result_summary.lower()
+
+
+def test_trace_has_exactly_one_entry_per_tool_call_the_model_actually_made(db):
+    hid = _household(db)
+    _seed(db, hid)
+    llm = ScriptedLLM(
+        [
+            ProviderReply(
+                text="",
+                tool_calls=[
+                    ToolCall(id="t1", name="net_worth_history", input={"months": 1}),
+                    ToolCall(id="t2", name="holdings_summary", input={}),
+                ],
+                stop_reason="tool_use",
+            ),
+            ProviderReply(text="## Where you stand\n- Two things checked.", stop_reason="end_turn"),
+        ]
+    )
+    result = insights.ask(db, hid, question="?", provider=llm)
+    assert [t.tool for t in result.trace] == ["net_worth_history", "holdings_summary"]
