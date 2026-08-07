@@ -16,6 +16,7 @@ from app.api import (
     insights,
     investments,
     recurring,
+    reports,
     transactions,
 )
 from app.api.deps import limiter
@@ -77,6 +78,7 @@ app.include_router(goals.router)
 app.include_router(insights.router)
 app.include_router(investments.router)
 app.include_router(recurring.router)
+app.include_router(reports.router)
 
 
 @app.get("/health")
