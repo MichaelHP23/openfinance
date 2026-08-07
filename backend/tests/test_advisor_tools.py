@@ -201,11 +201,74 @@ def test_transaction_search_rejects_a_limit_above_50(db, household):
     assert "error" in result
 
 
-def test_registry_matches_the_allowlist_exactly_with_five_tools():
+from datetime import date
+
+from app.services.categories import ensure_system_categories, system_category_id
+
+
+def test_budget_status_reports_budgeted_and_actual(db, household, account):
+    from app.services import budgets
+
+    ensure_system_categories(db)
+    groceries = system_category_id("Food & Drink/Groceries")
+    budgets.upsert(db, household.id, date(2026, 7, 1), [budgets.BudgetItem(groceries, Decimal("300.00"))])
+    _txn(db, household, account, "Groceries Run", "-50.00", on="2026-07-05")
+
+    result = advisor_tools.run_tool("budget_status", {"month": "2026-07"}, db, household.id)
+    row = next(c for c in result["categories"] if c["category"] == "Groceries")
+    assert row["budgeted"] == 300.0
+
+
+def test_budget_status_rejects_a_malformed_month(db, household):
+    result = advisor_tools.run_tool("budget_status", {"month": "not-a-month"}, db, household.id)
+    assert "error" in result
+
+
+def test_cashflow_forecast_reports_ending_and_minimum_balance(db, household, account):
+    result = advisor_tools.run_tool("cashflow_forecast", {"months": 1}, db, household.id)
+    assert result["ending_balance"] == 1500.0
+    assert result["minimum_balance"] == 1500.0
+    assert result["first_negative_day"] is None
+
+
+def test_cashflow_forecast_applies_a_hypothetical(db, household, account):
+    # `forecast.project` walks forward from the real wall-clock "today" (there's no
+    # `today` override on this tool's args), so the hypothetical's date has to be
+    # relative to now rather than a hardcoded past date, or it falls outside the
+    # walk and is silently never applied.
+    from datetime import timedelta
+
+    soon = (datetime.now(UTC).date() + timedelta(days=5)).isoformat()
+    result = advisor_tools.run_tool(
+        "cashflow_forecast",
+        {"months": 1, "hypothetical_amount": "-2000.00", "hypothetical_date": soon},
+        db,
+        household.id,
+    )
+    assert result["minimum_balance"] < 0
+
+
+def test_goal_progress_reports_every_active_goal(db, household, account):
+    from app.services import goals
+    from app.models.goal import GoalKind
+
+    goals.create(
+        db, household.id, name="Emergency Fund", kind=GoalKind.savings,
+        target_amount=Decimal("5000.00"), account_ids=[account.id],
+    )
+    result = advisor_tools.run_tool("goal_progress", {}, db, household.id)
+    assert result["goals"][0]["name"] == "Emergency Fund"
+    assert result["goals"][0]["progress"] == 1500.0
+
+
+def test_registry_matches_the_allowlist_with_all_eight_tools():
     assert set(advisor_tools._REGISTRY.keys()) == {
         "net_worth_history",
         "holdings_summary",
         "recurring_list",
         "spend_by_category",
         "transaction_search",
+        "budget_status",
+        "cashflow_forecast",
+        "goal_progress",
     }

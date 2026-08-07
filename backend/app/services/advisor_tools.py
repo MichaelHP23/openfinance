@@ -22,7 +22,10 @@ from pydantic import BaseModel, Field, ValidationError
 from sqlalchemy.orm import Session
 
 from app.models.recurring import SeriesStatus
+from app.services import budgets as budgets_service
 from app.services import categories as categories_service
+from app.services import forecast as forecast_service
+from app.services import goals as goals_service
 from app.services import portfolio as portfolio_service
 from app.services import recurring as recurring_service
 from app.services import transactions as transactions_service
@@ -189,6 +192,75 @@ def _transaction_search(
     }
 
 
+class BudgetStatusArgs(BaseModel):
+    month: str  # "YYYY-MM"
+
+
+def _budget_status(db: Session, household_id: uuid.UUID, args: BudgetStatusArgs) -> dict[str, Any]:
+    month = budgets_service.parse_month(args.month)
+    rows = budgets_service.status(db, household_id, month)
+    return {
+        "month": args.month,
+        "categories": [
+            {
+                "category": r.category_name,
+                "budgeted": _money(r.budgeted),
+                "actual": _money(r.actual),
+                "remaining": _money(r.remaining),
+                "pace": r.pace,
+            }
+            for r in rows
+        ],
+    }
+
+
+class CashflowForecastArgs(BaseModel):
+    months: int = Field(default=6, ge=1, le=24)
+    hypothetical_amount: Decimal | None = None
+    hypothetical_date: date | None = None
+
+
+def _cashflow_forecast(
+    db: Session, household_id: uuid.UUID, args: CashflowForecastArgs
+) -> dict[str, Any]:
+    hyps = None
+    if args.hypothetical_amount is not None and args.hypothetical_date is not None:
+        hyps = [forecast_service.Hypothetical(amount=args.hypothetical_amount, on_date=args.hypothetical_date)]
+    days = forecast_service.project(db, household_id, args.months, hyps)
+    if not days:
+        return {"days_projected": 0, "ending_balance": 0.0, "minimum_balance": 0.0, "first_negative_day": None}
+    minimum = min(d.projected_balance for d in days)
+    first_negative = next((d.on for d in days if d.projected_balance < 0), None)
+    return {
+        "days_projected": len(days),
+        "ending_balance": _money(days[-1].projected_balance),
+        "minimum_balance": _money(minimum),
+        "first_negative_day": first_negative.isoformat() if first_negative else None,
+    }
+
+
+class GoalProgressArgs(BaseModel):
+    pass
+
+
+def _goal_progress(db: Session, household_id: uuid.UUID, args: GoalProgressArgs) -> dict[str, Any]:
+    overview = forecast_service.goals_overview(db, household_id)
+    by_id = {g.id: g for g in goals_service.list_for(db, household_id)}
+    return {
+        "goals": [
+            {
+                "name": by_id[o.goal_id].name,
+                "kind": by_id[o.goal_id].kind.value,
+                "target_amount": _money(by_id[o.goal_id].target_amount),
+                "progress": _money(o.progress),
+                "projected_date": o.projected_date.isoformat() if o.projected_date else None,
+            }
+            for o in overview
+            if o.goal_id in by_id
+        ]
+    }
+
+
 _DESCRIPTIONS: dict[str, str] = {
     "net_worth_history": "Net worth (assets, debts, net) per recorded day over the trailing N months.",
     "holdings_summary": "Current investment holdings: units, market value, unrealized gain, share of portfolio.",
@@ -199,6 +271,9 @@ _DESCRIPTIONS: dict[str, str] = {
         "range. Returns at most 50 rows — the only tool that returns individual "
         "transactions; everything else here returns aggregates."
     ),
+    "budget_status": "Budgeted vs. actual spend, remaining amount, and pace for every category in a given month.",
+    "cashflow_forecast": "Projected cash balance over N months, optionally with one hypothetical purchase or deposit.",
+    "goal_progress": "Progress and projected completion date for every active savings or debt-payoff goal.",
 }
 
 # name -> (Pydantic argument schema, wrapper function). Order here is the order
@@ -209,6 +284,9 @@ _REGISTRY: dict[str, tuple[type[BaseModel], Any]] = {
     "recurring_list": (RecurringListArgs, _recurring_list),
     "spend_by_category": (SpendByCategoryArgs, _spend_by_category),
     "transaction_search": (TransactionSearchArgs, _transaction_search),
+    "budget_status": (BudgetStatusArgs, _budget_status),
+    "cashflow_forecast": (CashflowForecastArgs, _cashflow_forecast),
+    "goal_progress": (GoalProgressArgs, _goal_progress),
 }
 
 ALLOWED_TOOLS: tuple[str, ...] = tuple(_REGISTRY.keys())

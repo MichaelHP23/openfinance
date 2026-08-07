@@ -134,3 +134,30 @@ def test_advisor_tools_isolated_by_household(db):
         "spend_by_category", {"start": "2026-07-01", "end": "2026-07-31"}, db, h1
     )
     assert mine_spend["totals"] == [{"key": "Uncategorized", "amount": 10.0}]
+
+
+def test_advisor_p2_p3_tools_isolated_by_household(db):
+    from datetime import date
+
+    from app.services import advisor_tools
+    from app.services import budgets
+    from app.services import goals
+    from app.models.goal import GoalKind
+    from app.services.categories import ensure_system_categories, system_category_id
+
+    h1, h2 = _household(db).id, _household(db).id
+    ensure_system_categories(db)
+    groceries = system_category_id("Food & Drink/Groceries")
+
+    budgets.upsert(db, h1, date(2026, 7, 1), [budgets.BudgetItem(groceries, Decimal("300.00"))])
+    budgets.upsert(db, h2, date(2026, 7, 1), [budgets.BudgetItem(groceries, Decimal("999.00"))])
+    mine = advisor_tools.run_tool("budget_status", {"month": "2026-07"}, db, h1)
+    row = next(c for c in mine["categories"] if c["category"] == "Groceries")
+    assert row["budgeted"] == 300.0
+
+    a1 = accounts.create(db, h1, AccountCreate(type="savings", name="Mine"))
+    a2 = accounts.create(db, h2, AccountCreate(type="savings", name="Theirs"))
+    goals.create(db, h1, name="Mine", kind=GoalKind.savings, target_amount=Decimal("1"), account_ids=[a1.id])
+    goals.create(db, h2, name="Theirs", kind=GoalKind.savings, target_amount=Decimal("1"), account_ids=[a2.id])
+    names = {g["name"] for g in advisor_tools.run_tool("goal_progress", {}, db, h1)["goals"]}
+    assert names == {"Mine"}
