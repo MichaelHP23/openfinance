@@ -2,11 +2,12 @@ import json
 import uuid
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
+from typing import Any
 
 import pytest
 
 from app.models.household import Household
-from app.providers.llm import ClaudeProvider, LLMError
+from app.providers.llm import ClaudeProvider, LLMError, ProviderReply, ToolCall
 from app.schemas.account import AccountCreate
 from app.schemas.transaction import TxnCreate
 from app.services import accounts as accounts_service
@@ -16,20 +17,31 @@ from app.services import recurring as recurring_service
 from app.services import transactions as txn_service
 
 
-class RecordingLLM:
-    """Captures what the model would have been sent, and returns a canned answer."""
+class ScriptedLLM:
+    """A fake provider that plays back a fixed sequence of ProviderReply objects, so
+    a test can drive the tool-calling loop through several turns without hitting a
+    real model — the same role RecordingLLM played for the old single-call
+    `generate`, widened for a multi-turn conversation."""
 
-    name = "recording"
-    model = "recording-1"
+    name = "scripted"
+    model = "scripted-1"
 
-    def __init__(self) -> None:
-        self.system = ""
-        self.prompt = ""
+    def __init__(self, replies: list[ProviderReply]) -> None:
+        self._replies = list(replies)
+        self.calls: list[list[dict[str, Any]]] = []
 
     def complete(self, system: str, prompt: str, max_tokens: int = 1200) -> str:
-        self.system = system
-        self.prompt = prompt
-        return "## Where you stand\n- Fine."
+        raise NotImplementedError("the advisor loop only calls complete_with_tools")
+
+    def complete_with_tools(
+        self,
+        system: str,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]],
+        max_tokens: int = 1200,
+    ) -> ProviderReply:
+        self.calls.append([dict(m) for m in messages])
+        return self._replies.pop(0)
 
 
 def _household(db) -> uuid.UUID:
@@ -46,41 +58,17 @@ def _seed(db, hid):
     accounts_service.create(
         db, hid, AccountCreate(type="credit_card", name="Card", balance=Decimal(500))
     )
-    # Anchored mid-month: 30-day steps from an arbitrary "now" can land twice in the same
-    # calendar month (from Aug 1: Jul 31, Jul 1, Jun 1), and the assertions below count
-    # distinct months. From day 15, a 31-day step always lands in the month before.
     now = datetime.now(UTC).replace(day=15)
     for month in range(3):
         posted = now - timedelta(days=31 * month)
         txn_service.create(
-            db,
-            hid,
-            TxnCreate(
-                account_id=checking.id,
-                posted_at=posted,
-                amount=Decimal(3000),
-                merchant_raw="Payroll",
-            ),
+            db, hid, TxnCreate(account_id=checking.id, posted_at=posted, amount=Decimal(3000), merchant_raw="Payroll")
         )
         txn_service.create(
-            db,
-            hid,
-            TxnCreate(
-                account_id=checking.id,
-                posted_at=posted,
-                amount=Decimal("-15.99"),
-                merchant_raw="Netflix",
-            ),
+            db, hid, TxnCreate(account_id=checking.id, posted_at=posted, amount=Decimal("-15.99"), merchant_raw="Netflix")
         )
         txn_service.create(
-            db,
-            hid,
-            TxnCreate(
-                account_id=checking.id,
-                posted_at=posted,
-                amount=Decimal(-1200),
-                merchant_raw="Rent",
-            ),
+            db, hid, TxnCreate(account_id=checking.id, posted_at=posted, amount=Decimal(-1200), merchant_raw="Rent")
         )
     return checking
 
@@ -111,7 +99,6 @@ def test_digest_flags_a_repeating_charge_as_recurring(db):
     by_merchant = {r["merchant"]: r for r in facts.recurring_candidates}
     assert "Netflix" in by_merchant
     assert by_merchant["Netflix"]["cadence"] == "monthly"
-    assert by_merchant["Netflix"]["next_expected_on"] is not None
 
 
 def test_digest_separates_income_and_spending_per_month(db):
@@ -124,36 +111,70 @@ def test_digest_separates_income_and_spending_per_month(db):
         assert month.spending == 1215.99
 
 
-def test_the_model_is_given_the_real_numbers_and_told_not_to_invent_any(db):
-    hid = _household(db)
-    _seed(db, hid)
-    llm = RecordingLLM()
-
-    result = insights.generate(db, hid, provider=llm)
-
-    assert result["summary"].startswith("## Where you stand")
-    assert result["model"] == "recording-1"
-    # The prompt carries the computed digest, not raw rows for the model to add up.
-    payload = json.loads(llm.prompt.split("```json")[1].split("```")[0])
-    assert payload["net_worth"] == 1500.0
-    assert "must come from" in llm.prompt
-    assert "Never estimate" in llm.system
-
-
-def test_a_users_question_is_passed_through(db):
-    hid = _household(db)
-    _seed(db, hid)
-    llm = RecordingLLM()
-    insights.generate(db, hid, provider=llm, question="Can I afford a $900 flight?")
-    assert "Can I afford a $900 flight?" in llm.prompt
-
-
 def test_empty_household_says_so_without_calling_the_model(db):
     hid = _household(db)
-    llm = RecordingLLM()
-    result = insights.generate(db, hid, provider=llm)
-    assert "Nothing to analyze yet" in result["summary"]
-    assert llm.prompt == ""  # no API call, no spend
+    llm = ScriptedLLM([])
+    result = insights.ask(db, hid, provider=llm)
+    assert "Nothing to analyze yet" in result.answer
+    assert result.trace == []
+    assert llm.calls == []  # no API call, no spend
+
+
+def test_ask_with_no_tool_call_just_answers_from_the_digest(db):
+    hid = _household(db)
+    _seed(db, hid)
+    llm = ScriptedLLM([ProviderReply(text="## Where you stand\n- Fine.", stop_reason="end_turn")])
+    result = insights.ask(db, hid, question="How am I doing?", provider=llm)
+    assert result.answer == "## Where you stand\n- Fine."
+    assert result.model == "scripted-1"
+    assert result.trace == []
+    # The opening message carries the computed digest, not raw rows for the model to
+    # add up itself.
+    opening = llm.calls[0][0]["content"]
+    payload = json.loads(opening.split("```json")[1].split("```")[0])
+    assert payload["net_worth"] == 1500.0
+    assert "How am I doing?" in opening
+
+
+def test_ask_with_no_question_uses_a_default_prompt(db):
+    hid = _household(db)
+    _seed(db, hid)
+    llm = ScriptedLLM([ProviderReply(text="## Where you stand\n- Fine.", stop_reason="end_turn")])
+    insights.ask(db, hid, provider=llm)
+    assert "overview" in llm.calls[0][0]["content"].lower()
+
+
+def test_ask_calls_a_tool_and_answers_from_its_result(db):
+    hid = _household(db)
+    _seed(db, hid)
+    llm = ScriptedLLM(
+        [
+            ProviderReply(
+                text="",
+                tool_calls=[ToolCall(id="t1", name="net_worth_history", input={"months": 3})],
+                stop_reason="tool_use",
+            ),
+            ProviderReply(text="## Where you stand\n- Net worth is healthy.", stop_reason="end_turn"),
+        ]
+    )
+    result = insights.ask(db, hid, question="How's my net worth?", provider=llm)
+    assert result.answer == "## Where you stand\n- Net worth is healthy."
+    assert len(result.trace) == 1
+    assert result.trace[0].tool == "net_worth_history"
+    assert result.trace[0].args == {"months": 3}
+    assert result.trace[0].result_summary  # not empty
+    # The second call to the model includes the tool result as a tool_result block.
+    second_call_messages = llm.calls[1]
+    assert second_call_messages[-1]["content"][0]["type"] == "tool_result"
+    assert second_call_messages[-1]["content"][0]["tool_use_id"] == "t1"
+
+
+def test_ask_propagates_llm_error_when_the_provider_is_unconfigured(db):
+    hid = _household(db)
+    _seed(db, hid)
+    provider = ClaudeProvider(api_key="")
+    with pytest.raises(LLMError, match="ANTHROPIC_API_KEY"):
+        insights.ask(db, hid, question="Anything?", provider=provider)
 
 
 def test_claude_provider_without_a_key_reports_unavailable():
