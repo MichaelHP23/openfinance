@@ -16,8 +16,15 @@ from app.services import snapshots as snapshots_service
 router = APIRouter(tags=["insights"])
 
 
-class InsightsOut(BaseModel):
-    summary: str
+class TraceEntryOut(BaseModel):
+    tool: str
+    args: dict[str, Any]
+    result_summary: str
+
+
+class AskOut(BaseModel):
+    answer: str
+    trace: list[TraceEntryOut]
     model: str
 
 
@@ -38,17 +45,19 @@ def insights_available() -> dict[str, bool]:
     return {"available": ClaudeProvider().configured}
 
 
-@router.post("/insights", response_model=InsightsOut)
-def generate_insights(
+@router.post("/insights/ask", response_model=AskOut)
+def ask_insights(
     body: AskIn | None = None,
     hid: uuid.UUID = Depends(require_household),
     db: Session = Depends(get_db),
-) -> InsightsOut:
+) -> AskOut:
+    if not ClaudeProvider().configured:
+        raise HTTPException(status_code=503, detail="No ANTHROPIC_API_KEY set")
     try:
-        result = insights_service.generate(db, hid, question=(body.question if body else None))
+        result = insights_service.ask(db, hid, question=(body.question if body else None))
     except LLMError as exc:
         raise HTTPException(status_code=503, detail=str(exc))
-    return InsightsOut(**result)
+    return AskOut(**result.to_dict())
 
 
 @router.get("/insights/digest")
