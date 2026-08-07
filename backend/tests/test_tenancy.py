@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import UTC, date, datetime
 from decimal import Decimal
 
 from app.models.account import Account, AccountType
@@ -7,7 +7,10 @@ from app.models.household import Household
 from app.schemas.account import AccountCreate
 from app.schemas.budget import BudgetItemIn  # noqa: F401  (kept import-adjacent; unused directly)
 from app.schemas.category import CategoryCreate, RuleCreate, RuleUpdate
+from app.schemas.transaction import TxnCreate
 from app.services import accounts, budgets, categories, categorization, goals
+from app.services import advisor_tools
+from app.services import transactions as txn_service
 from app.services.categories import ensure_system_categories, system_category_id
 
 
@@ -106,3 +109,28 @@ def test_goals_isolated_by_household(db):
         pass
     else:
         raise AssertionError("expected UnknownAccount")
+
+
+def test_advisor_tools_isolated_by_household(db):
+    h1, h2 = _household(db).id, _household(db).id
+    a1 = accounts.create(db, h1, AccountCreate(type="checking", name="Mine"))
+    a2 = accounts.create(db, h2, AccountCreate(type="checking", name="Theirs"))
+    txn_service.create(
+        db, h1,
+        TxnCreate(account_id=a1.id, posted_at=datetime(2026, 7, 1, tzinfo=UTC), amount=Decimal("-10.00"), merchant_raw="Mine Shop"),
+    )
+    txn_service.create(
+        db, h2,
+        TxnCreate(account_id=a2.id, posted_at=datetime(2026, 7, 1, tzinfo=UTC), amount=Decimal("-20.00"), merchant_raw="Their Shop"),
+    )
+
+    mine = advisor_tools.run_tool("transaction_search", {"limit": 50}, db, h1)
+    assert {t["merchant"] for t in mine["transactions"]} == {"Mine Shop"}
+
+    theirs = advisor_tools.run_tool("transaction_search", {"limit": 50}, db, h2)
+    assert {t["merchant"] for t in theirs["transactions"]} == {"Their Shop"}
+
+    mine_spend = advisor_tools.run_tool(
+        "spend_by_category", {"start": "2026-07-01", "end": "2026-07-31"}, db, h1
+    )
+    assert mine_spend["totals"] == [{"key": "Uncategorized", "amount": 10.0}]
