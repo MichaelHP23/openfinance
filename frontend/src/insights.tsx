@@ -6,8 +6,6 @@ import { AreaChart } from "./charts";
 import { usd } from "./money";
 import { Card, Empty } from "./ui/Shell";
 
-type Insight = { summary: string; model: string };
-
 export function NetWorthChart({ points }: { points: NetWorthPoint[] }) {
   if (points.length < 2) {
     return (
@@ -35,8 +33,13 @@ export function NetWorthChart({ points }: { points: NetWorthPoint[] }) {
   );
 }
 
+type TraceEntry = { tool: string; args: Record<string, unknown>; result_summary: string };
+type AskResponse = { answer: string; trace: TraceEntry[]; model: string };
+type Turn = { question: string; answer: string; trace: TraceEntry[] };
+
 export function Assistant() {
   const [question, setQuestion] = useState("");
+  const [turns, setTurns] = useState<Turn[]>([]);
   const { data: availability } = useQuery({
     queryKey: ["insights-available"],
     queryFn: () => apiFetch<{ available: boolean }>("/insights/available"),
@@ -44,10 +47,14 @@ export function Assistant() {
 
   const ask = useMutation({
     mutationFn: (q: string) =>
-      apiFetch<Insight>("/insights", {
+      apiFetch<AskResponse>("/insights/ask", {
         method: "POST",
         body: JSON.stringify({ question: q || null }),
       }),
+    onSuccess: (data, q) => {
+      setTurns((prev) => [...prev, { question: q, answer: data.answer, trace: data.trace }]);
+      setQuestion("");
+    },
   });
 
   if (!availability?.available) return null;
@@ -84,7 +91,32 @@ export function Assistant() {
         </p>
       )}
 
-      {ask.data && <Markdown text={ask.data.summary} />}
+      <div className="flex flex-col">
+        {turns.map((turn, i) => (
+          <div key={i} className={i > 0 ? "mt-4 border-t border-line pt-4" : ""}>
+            {turn.question && <p className="mt-4 text-sm font-medium text-bone">{turn.question}</p>}
+            <Markdown text={turn.answer} />
+            {turn.trace.length > 0 && (
+              <details className="mt-2">
+                <summary className="cursor-pointer text-[11px] text-muted">
+                  {turn.trace.length} tool call{turn.trace.length === 1 ? "" : "s"}
+                </summary>
+                <ul className="mt-2 flex flex-col gap-1.5 text-[11px] text-muted">
+                  {turn.trace.map((t, j) => (
+                    <li key={j}>
+                      <span className="text-bone">{t.tool}</span>
+                      {"("}
+                      {JSON.stringify(t.args)}
+                      {") → "}
+                      {t.result_summary}
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            )}
+          </div>
+        ))}
+      </div>
     </Card>
   );
 }
