@@ -149,7 +149,15 @@ transactions, likely subscriptions — and the model is given only that, with
 instructions that every figure it cites must come from it. `GET /insights/digest`
 returns those exact facts so you can check any claim it makes.
 
-Enabling it does mean a summary of your finances is sent to Anthropic's API.
+Enabling it means a summary of your finances — the same digest `GET /insights/digest`
+returns — is sent to Anthropic's API for every question, plus whatever the model asks
+its tools for: net worth history, spending grouped by category or month, budget
+status, a cash-flow forecast, goal progress, investment holdings, and recurring
+charges. One of those tools, transaction search, can return up to 50 individual
+transactions per search — merchant, date, and amount, no account numbers or balances
+beyond what the digest already includes. Every tool call and what it returned is
+shown in a collapsible trace under the assistant's answer, so nothing it sent or got
+back is hidden from you.
 
 The assistant can also propose categories for merchants it hasn't seen sorted. That call
 sends merchant *names* and the category list — no amounts, no dates, no accounts — and

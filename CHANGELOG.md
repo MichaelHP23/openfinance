@@ -93,6 +93,19 @@ P2 (budgets) is complete on the `p2-budgets` branch, building on P1's categories
   the new Budgets page — keyboard reachable, `aria-expanded` on the trigger, closes on
   route change and on Escape. Desktop's sidebar is unchanged, listing everything.
 
+### Added
+- P4: the AI advisor becomes a bounded tool-calling loop instead of one digest and one
+  LLM call. Eight read-only tools — net worth history, spend by category, transaction
+  search (capped at 50 rows), budget status, cash-flow forecast, goal progress,
+  holdings summary, recurring charges — are asserted against an allowlist so no
+  mutation function can ever become reachable from the model. The loop stops at 8 tool
+  calls or 2 minutes of wall clock, whichever comes first, and returns a partial
+  answer with a note rather than an error either way. `POST /insights/ask` replaces
+  the old `POST /insights`; `GET /insights/digest` and `GET /insights/available` are
+  unchanged. The Overview assistant card is now a conversation, and every answer
+  carries a collapsible trace of exactly which tools were called, with what
+  arguments, and what came back.
+
 ## [Unreleased] — M0 Foundation
 
 ### Added
