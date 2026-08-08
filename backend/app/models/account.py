@@ -37,3 +37,7 @@ class Account(Base, UUIDMixin, TimestampMixin):
     is_manual: Mapped[bool] = mapped_column(Boolean, default=True)
     # The provider's own id for this account — how a sync matches rows it already created.
     external_id: Mapped[str | None] = mapped_column(nullable=True, index=True)
+    # Estate readiness (P5): who receives this account. One string, not a table — a
+    # beneficiary record here is a name, not a legal document, until there's a reason
+    # for more.
+    beneficiary: Mapped[str | None] = mapped_column(nullable=True)

@@ -42,6 +42,7 @@ services:
     # interpolating empty and publishing on 0.0.0.0. Fail closed — on a host with a public
     # IP the quiet fallback is an unauthenticated finance API on the internet.
     ports: ["${TS_IP:?TS_IP must be set — see .env.example}:8000:8000"]
+    volumes: ["documents-data:/app/data/documents"]
     command: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"
   web:
     restart: unless-stopped
@@ -54,3 +55,4 @@ services:
     # not this container — it serves the built bundle, so edits need a rebuild.
 volumes:
   pgdata:
+  documents-data:

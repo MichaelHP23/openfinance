@@ -37,6 +37,11 @@ class Settings(BaseSettings):
     price_refresh_hours: float = 24.0
     base_currency: str = "USD"
 
+    # Document vault (P5). Files are encrypted before they ever touch disk (see
+    # app/services/documents.py) — this only says where the encrypted blobs live.
+    # Compose mounts a named volume here so they survive a container recreate.
+    documents_dir: str = "./data/documents"
+
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]

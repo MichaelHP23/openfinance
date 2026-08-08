@@ -134,3 +134,16 @@ def test_update_refuses_another_households_account(db):
 
     acct = accounts.create(db, _real_household(db), AccountCreate(type="checking", name="Mine"))
     assert accounts.update(db, _uuid.uuid4(), acct.id, AccountUpdate(name="Yours")) is None
+
+
+def test_beneficiary_round_trips(db):
+    from app.models.household import Household
+
+    household = Household(name="Beneficiary Household")
+    db.add(household)
+    db.commit()
+
+    acct = accounts.create(
+        db, household.id, AccountCreate(type="investment", name="IRA", beneficiary="Jane Doe")
+    )
+    assert acct.beneficiary == "Jane Doe"

@@ -4,6 +4,7 @@ from app.models.budget import Budget  # noqa: F401
 from app.models.category import Category  # noqa: F401
 from app.models.category_rule import CategoryRule, MatchType, RuleSource  # noqa: F401
 from app.models.connection import ConnStatus, Provider, ProviderConnection  # noqa: F401
+from app.models.document import Document, DocumentKind  # noqa: F401
 from app.models.goal import Goal, GoalAccount, GoalKind, GoalStatus  # noqa: F401
 from app.models.household import Household  # noqa: F401
 from app.models.recurring import Cadence, RecurringSeries, SeriesStatus  # noqa: F401

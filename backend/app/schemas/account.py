@@ -10,6 +10,7 @@ class AccountCreate(BaseModel):
     institution: str | None = None
     currency: str = "USD"
     balance: Decimal = Decimal(0)
+    beneficiary: str | None = None
 
 
 class AccountOut(BaseModel):
@@ -20,6 +21,7 @@ class AccountOut(BaseModel):
     currency: str
     balance: Decimal
     is_manual: bool
+    beneficiary: str | None
     model_config = {"from_attributes": True}
 
 
@@ -28,3 +30,4 @@ class AccountUpdate(BaseModel):
     type: str | None = None
     institution: str | None = None
     balance: Decimal | None = None
+    beneficiary: str | None = None

@@ -22,6 +22,7 @@ def create(db: Session, household_id: uuid.UUID, data: AccountCreate) -> Account
         currency=data.currency,
         balance=data.balance,
         is_manual=True,
+        beneficiary=data.beneficiary,
     )
     db.add(acct)
     db.commit()
