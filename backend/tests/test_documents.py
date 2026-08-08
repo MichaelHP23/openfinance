@@ -3,11 +3,17 @@ import uuid
 from pathlib import Path
 
 import pytest
+from fastapi.testclient import TestClient
 
+from app.api.deps import require_household
 from app.core.config import settings
+from app.core.db import get_db
+from app.main import app
 from app.models.document import Document, DocumentKind
 from app.models.household import Household
 from app.services import documents
+
+app.state.limiter.enabled = False
 
 
 @pytest.fixture
@@ -134,3 +140,68 @@ def test_delete_removes_the_row_and_the_file(db, household):
 
 def test_delete_of_unknown_document_returns_false(db, household):
     assert documents.delete(db, household.id, uuid.uuid4()) is False
+
+
+@pytest.fixture
+def client(db, household):
+    app.dependency_overrides[get_db] = lambda: db
+    app.dependency_overrides[require_household] = lambda: household.id
+    yield TestClient(app)
+    app.dependency_overrides.pop(get_db, None)
+    app.dependency_overrides.pop(require_household, None)
+
+
+def _upload(client, content=b"the whole document, byte for byte"):
+    return client.post(
+        "/documents",
+        data={"kind": "will", "title": "My Will", "notes": "Signed 2026"},
+        files={"file": ("will.pdf", content, "application/pdf")},
+    )
+
+
+def test_upload_then_list(client):
+    res = _upload(client)
+    assert res.status_code == 200
+    body = res.json()
+    assert body["kind"] == "will"
+    assert body["title"] == "My Will"
+    assert body["size_bytes"] == len(b"the whole document, byte for byte")
+
+    listed = client.get("/documents").json()
+    assert len(listed) == 1
+    assert listed[0]["id"] == body["id"]
+
+
+def test_download_round_trips_byte_identical(client):
+    content = b"the whole document, byte for byte"
+    uploaded = _upload(client, content).json()
+
+    res = client.get(f"/documents/{uploaded['id']}/download")
+    assert res.status_code == 200
+    assert res.content == content
+    assert res.headers["content-type"] == "application/pdf"
+
+
+def test_delete_then_download_404s(client):
+    uploaded = _upload(client).json()
+    assert client.delete(f"/documents/{uploaded['id']}").status_code == 200
+    assert client.get(f"/documents/{uploaded['id']}/download").status_code == 404
+
+
+def test_a_document_from_another_household_is_not_downloadable(db, household, other_household):
+    app.dependency_overrides[get_db] = lambda: db
+    app.dependency_overrides[require_household] = lambda: household.id
+    mine = TestClient(app)
+    uploaded = _upload(mine).json()
+
+    app.dependency_overrides[require_household] = lambda: other_household.id
+    theirs = TestClient(app)
+    res = theirs.get(f"/documents/{uploaded['id']}/download")
+    assert res.status_code == 404
+
+    app.dependency_overrides.pop(get_db, None)
+    app.dependency_overrides.pop(require_household, None)
+
+
+def test_unknown_document_download_is_404(client):
+    assert client.get(f"/documents/{uuid.uuid4()}/download").status_code == 404
