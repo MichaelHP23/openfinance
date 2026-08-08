@@ -137,3 +137,130 @@ def test_spending_endpoint_returns_grouped_buckets(client, db, household, accoun
 def test_spending_endpoint_rejects_bad_group_by(client, db):
     res = client.get("/reports/spending?start=2026-07-01&end=2026-07-31&group_by=bogus")
     assert res.status_code == 422
+
+
+from datetime import UTC as _UTC  # noqa: F401  (already imported above; kept explicit for the diff)
+
+from app.models.recurring import Cadence, RecurringSeries, SeriesStatus
+from app.models.snapshot import BalanceSnapshot
+
+
+def test_income_vs_expense_covers_every_month_even_empty_ones(db, household, account):
+    today = datetime.now(UTC).date()
+    current_key = today.replace(day=1).strftime("%Y-%m")
+    db.add(_txn(household, account, "3000.00", "PAYCHECK", today.replace(day=1)))
+    db.add(_txn(household, account, "-500.00", "RENT", today.replace(day=1)))
+    db.commit()
+
+    result = reports.income_vs_expense(db, household.id, months=12)
+
+    assert len(result) == 12
+    assert result[-1].month == current_key
+    this_month = next(m for m in result if m.month == current_key)
+    assert this_month.income == Decimal("3000.00")
+    assert this_month.expense == Decimal("500.00")
+    assert this_month.net == Decimal("2500.00")
+    # A month with no transactions still appears, at zero — a gap in the chart is a
+    # real answer ("nothing happened"), not a row that should vanish.
+    assert any(m.income == Decimal(0) and m.expense == Decimal(0) for m in result)
+
+
+def test_year_in_review_computes_expected_fields(db, household, account):
+    ensure_system_categories(db)
+    electronics = system_category_id("Shopping/Electronics")
+    db.add_all(
+        [
+            _txn(household, account, "3000.00", "PAYCHECK", date(2026, 1, 15)),
+            _txn(household, account, "-42.00", "WHOLE FOODS", date(2026, 3, 1), GROCERIES),
+            _txn(household, account, "-8.00", "BLUE BOTTLE", date(2026, 3, 2), COFFEE),
+            _txn(household, account, "-500.00", "APPLE STORE", date(2026, 5, 1), electronics),
+        ]
+    )
+    db.add(
+        RecurringSeries(
+            household_id=household.id,
+            merchant_key="netflix",
+            label="Netflix",
+            cadence=Cadence.monthly,
+            status=SeriesStatus.active,
+            direction=-1,
+            typical_amount=Decimal("15.00"),
+            last_amount=Decimal("15.00"),
+            min_amount=Decimal("15.00"),
+            max_amount=Decimal("15.00"),
+            charge_count=3,
+            first_charged_on=date(2026, 2, 1),
+            last_charged_on=date(2026, 4, 1),
+            confidence=90,
+        )
+    )
+    db.add(
+        RecurringSeries(
+            household_id=household.id,
+            merchant_key="gym",
+            label="Gym",
+            cadence=Cadence.monthly,
+            status=SeriesStatus.cancelled,
+            direction=-1,
+            typical_amount=Decimal("40.00"),
+            last_amount=Decimal("40.00"),
+            min_amount=Decimal("40.00"),
+            max_amount=Decimal("40.00"),
+            charge_count=3,
+            first_charged_on=date(2025, 10, 1),
+            last_charged_on=date(2026, 4, 1),
+            confidence=90,
+        )
+    )
+    db.commit()
+
+    r = reports.year_in_review(db, household.id, 2026)
+
+    assert r.total_in == Decimal("3000.00")
+    assert r.total_out == Decimal("550.00")
+    assert r.savings_rate == (Decimal("2450.00") / Decimal("3000.00") * 100)
+    assert r.biggest_category == "Electronics"
+    assert r.biggest_category_amount == Decimal("500.00")
+    assert r.biggest_transaction_merchant == "APPLE STORE"
+    assert r.biggest_transaction_amount == Decimal("500.00")
+    assert r.new_subscriptions == ["Netflix"]
+    assert r.cancelled_subscriptions == ["Gym"]
+    assert r.net_worth_delta is None  # no snapshots recorded in this test
+
+
+def test_year_in_review_net_worth_delta_uses_recorded_snapshots(db, household, account):
+    db.add_all(
+        [
+            BalanceSnapshot(
+                household_id=household.id, account_id=account.id,
+                captured_on=date(2026, 1, 1), balance=Decimal("1000.00"),
+            ),
+            BalanceSnapshot(
+                household_id=household.id, account_id=account.id,
+                captured_on=date(2026, 6, 1), balance=Decimal("1500.00"),
+            ),
+        ]
+    )
+    db.commit()
+
+    r = reports.year_in_review(db, household.id, 2026)
+    assert r.net_worth_delta == Decimal("500.00")
+
+
+def test_year_in_review_endpoint(client, db, household, account):
+    db.add(Transaction(
+        household_id=household.id, account_id=account.id,
+        posted_at=datetime(2026, 1, 15, tzinfo=UTC), amount=Decimal("1000.00"),
+        currency="USD", merchant_raw="PAYCHECK",
+    ))
+    db.commit()
+
+    res = client.get("/reports/year-in-review?year=2026")
+    assert res.status_code == 200
+    assert res.json()["total_in"] == "1000.00"
+
+
+def test_income_vs_expense_endpoint_default_is_twelve_months(client, db):
+    res = client.get("/reports/income-vs-expense")
+    assert res.status_code == 200
+    assert len(res.json()) == 12
