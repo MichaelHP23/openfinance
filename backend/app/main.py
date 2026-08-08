@@ -11,6 +11,7 @@ from app.api import (
     category_rules,
     connections,
     documents,
+    estate,
     forecast,
     goals,
     imports,
@@ -76,6 +77,7 @@ app.include_router(transactions.router)
 app.include_router(imports.router)
 app.include_router(connections.router)
 app.include_router(documents.router)
+app.include_router(estate.router)
 app.include_router(forecast.router)
 app.include_router(goals.router)
 app.include_router(insights.router)
