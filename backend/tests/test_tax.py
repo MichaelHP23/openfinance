@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import UTC, date, datetime
 from decimal import Decimal
 
 import pytest
@@ -11,7 +11,9 @@ from app.models.account import Account, AccountType
 from app.models.household import Household
 from app.models.security import Security
 from app.models.trade import Trade, TradeType
+from app.models.transaction import Transaction
 from app.services import tax
+from app.services.categories import ensure_system_categories, system_category_id
 
 app.state.limiter.enabled = False
 
@@ -153,3 +155,78 @@ def test_realized_gains_endpoint(client, db, household, account, security):
     body = res.json()
     assert body["total_gain"] == "200.00"
     assert body["gains"][0]["symbol"] == "VTI"
+
+
+def test_income_summary_reads_dividends_and_interest_from_categorized_transactions(db, household, account):
+    ensure_system_categories(db)
+    dividends = system_category_id("Income/Dividends")
+    interest = system_category_id("Income/Interest")
+    db.add_all(
+        [
+            Transaction(household_id=household.id, account_id=account.id,
+                        posted_at=datetime(2026, 3, 1, tzinfo=UTC), amount=Decimal("120.00"),
+                        currency="USD", merchant_raw="VTI DIV", category_id=dividends),
+            Transaction(household_id=household.id, account_id=account.id,
+                        posted_at=datetime(2026, 4, 1, tzinfo=UTC), amount=Decimal("5.00"),
+                        currency="USD", merchant_raw="BANK INTEREST", category_id=interest),
+            Transaction(household_id=household.id, account_id=account.id,
+                        posted_at=datetime(2025, 12, 1, tzinfo=UTC), amount=Decimal("999.00"),
+                        currency="USD", merchant_raw="LAST YEAR DIV", category_id=dividends),
+        ]
+    )
+    db.commit()
+
+    summary = tax.income_summary(db, household.id, 2026)
+
+    assert summary.dividends == Decimal("120.00")
+    assert summary.interest == Decimal("5.00")
+    assert summary.total == Decimal("125.00")
+
+
+def test_income_summary_ignores_trade_log_dividends(db, household, account, security):
+    """Dividends recorded as a Trade row are a different feature's data and are not
+    double-counted here — see the plan's recorded deviation on why."""
+    db.add(
+        _trade(household, account, security, traded_on=date(2026, 3, 1), type=TradeType.dividend,
+               quantity=Decimal(0), price_per_unit=Decimal("50.00"))
+    )
+    db.commit()
+
+    assert tax.income_summary(db, household.id, 2026).total == Decimal(0)
+
+
+def test_export_csv_discloses_wash_sales_are_not_handled(db, household, account, security):
+    db.add_all(
+        [
+            _trade(household, account, security, traded_on=date(2024, 1, 1), type=TradeType.buy,
+                   quantity=Decimal(10), price_per_unit=Decimal(10)),
+            _trade(household, account, security, traded_on=date(2026, 1, 1), type=TradeType.sell,
+                   quantity=Decimal(10), price_per_unit=Decimal(30)),
+        ]
+    )
+    db.commit()
+
+    csv_text = tax.export_csv(db, household.id, 2026)
+
+    assert "wash sale" in csv_text.lower()
+    assert "advice" not in csv_text.lower()
+    assert "VTI" in csv_text
+    assert "Short-term total" in csv_text
+    assert "Long-term total" in csv_text
+
+
+def test_export_endpoint_returns_csv(client, db, household, account, security):
+    db.add_all(
+        [
+            _trade(household, account, security, traded_on=date(2024, 1, 1), type=TradeType.buy,
+                   quantity=Decimal(10), price_per_unit=Decimal(10)),
+            _trade(household, account, security, traded_on=date(2026, 1, 1), type=TradeType.sell,
+                   quantity=Decimal(10), price_per_unit=Decimal(30)),
+        ]
+    )
+    db.commit()
+
+    res = client.get("/tax/export?year=2026")
+    assert res.status_code == 200
+    assert res.headers["content-type"].startswith("text/csv")
+    assert "wash sale" in res.text.lower()

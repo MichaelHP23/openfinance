@@ -24,3 +24,10 @@ class RealizedGainsOut(BaseModel):
     short_term_gain: Decimal
     long_term_gain: Decimal
     total_gain: Decimal
+
+
+class IncomeSummaryOut(BaseModel):
+    year: int
+    dividends: Decimal
+    interest: Decimal
+    total: Decimal

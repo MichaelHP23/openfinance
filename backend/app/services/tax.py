@@ -9,10 +9,12 @@ distinction, so realized gains here cover every sell trade; see this plan's reco
 deviation for why that's a reporting-tool limitation, not a bug.
 """
 
+import csv
+import io
 import uuid
 from collections import defaultdict, deque
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import UTC, date, datetime
 from decimal import Decimal
 
 from sqlalchemy import select
@@ -20,6 +22,8 @@ from sqlalchemy.orm import Session
 
 from app.models.security import Security
 from app.models.trade import Trade, TradeType
+from app.models.transaction import Transaction
+from app.services.categories import system_category_id
 
 LONG_TERM_DAYS = 365
 
@@ -146,3 +150,75 @@ def realized_gains(db: Session, household_id: uuid.UUID, year: int) -> RealizedG
     return RealizedGainsResult(
         year=year, gains=year_gains, short_term_gain=short, long_term_gain=long_, total_gain=_money(short + long_)
     )
+
+
+@dataclass
+class IncomeSummary:
+    year: int
+    dividends: Decimal
+    interest: Decimal
+    total: Decimal
+
+
+def income_summary(db: Session, household_id: uuid.UUID, year: int) -> IncomeSummary:
+    """Dividends and interest, both read from categorized transactions (P1's system
+    taxonomy) rather than from the trade log's own `dividend` TradeType — a household's
+    brokerage dividend usually also lands as a bank-fed transaction row, and reading it
+    from both places would double it. `realized_gains` above is the only place this
+    phase reads `models/trade.py` directly."""
+    dividends_id = system_category_id("Income/Dividends")
+    interest_id = system_category_id("Income/Interest")
+    since = datetime(year, 1, 1, tzinfo=UTC)
+    until = datetime(year + 1, 1, 1, tzinfo=UTC)
+
+    txns = db.scalars(
+        select(Transaction).where(
+            Transaction.household_id == household_id,
+            Transaction.category_id.in_([dividends_id, interest_id]),
+            Transaction.posted_at >= since,
+            Transaction.posted_at < until,
+        )
+    )
+    dividends = Decimal(0)
+    interest = Decimal(0)
+    for t in txns:
+        if t.category_id == dividends_id:
+            dividends += t.amount
+        elif t.category_id == interest_id:
+            interest += t.amount
+    # Quantized to cents before leaving the service: Transaction.amount is NUMERIC(19,4),
+    # which round-trips through the ORM with four decimal places (see reports.py's
+    # income_vs_expense for the same fix).
+    dividends = _money(dividends)
+    interest = _money(interest)
+    return IncomeSummary(year=year, dividends=dividends, interest=interest, total=_money(dividends + interest))
+
+
+WASH_SALE_DISCLAIMER = (
+    "This export does not detect or adjust for wash sales. If a security was sold at a "
+    "loss and a substantially identical one bought within 30 days, the real deductible "
+    "loss may be lower than the figure below. This is a reporting tool only — confirm "
+    "with a tax professional before filing."
+)
+
+
+def export_csv(db: Session, household_id: uuid.UUID, year: int) -> str:
+    """A Schedule-D-shaped CSV: one row per matched lot, then short/long totals. A
+    starting point to paste from, not a filing document."""
+    result = realized_gains(db, household_id, year)
+    out = io.StringIO()
+    writer = csv.writer(out)
+    writer.writerow([f"# {WASH_SALE_DISCLAIMER}"])
+    writer.writerow(
+        ["Symbol", "Account", "Date acquired", "Date sold", "Proceeds", "Cost basis", "Gain/loss", "Term"]
+    )
+    for g in result.gains:
+        writer.writerow(
+            [g.symbol, str(g.account_id), g.opened_on.isoformat(), g.closed_on.isoformat(),
+             str(g.proceeds), str(g.cost_basis), str(g.gain), g.term]
+        )
+    writer.writerow([])
+    writer.writerow(["Short-term total", str(result.short_term_gain)])
+    writer.writerow(["Long-term total", str(result.long_term_gain)])
+    writer.writerow(["Total", str(result.total_gain)])
+    return out.getvalue()
