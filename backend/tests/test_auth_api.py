@@ -53,3 +53,40 @@ def test_logout_clears_cookie(db):
     r = c.post("/auth/logout")
     assert r.status_code == 200
     assert "session" not in c.cookies
+
+
+def test_change_password_flow(db):
+    c = csrf_client(app, db, get_db)
+    c.post("/auth/register", json={"email": "pw@example.com", "password": "pw12345"})
+    r = c.post(
+        "/auth/password",
+        json={"current_password": "pw12345", "new_password": "newpassword"},
+    )
+    assert r.status_code == 200
+    # old cookie session is gone; new one from the response works
+    r2 = c.get("/auth/me")
+    assert r2.status_code == 200
+
+
+def test_change_password_wrong_current_rejected(db):
+    c = csrf_client(app, db, get_db)
+    c.post("/auth/register", json={"email": "pw2@example.com", "password": "pw12345"})
+    r = c.post(
+        "/auth/password", json={"current_password": "nope", "new_password": "newpassword"}
+    )
+    assert r.status_code == 401
+
+
+def test_list_and_revoke_sessions_api(db):
+    c = csrf_client(app, db, get_db)
+    c.post("/auth/register", json={"email": "sess@example.com", "password": "pw12345"})
+    r = c.get("/auth/sessions")
+    assert r.status_code == 200
+    sessions = r.json()
+    assert len(sessions) == 1
+    assert sessions[0]["is_current"] is True
+
+    r2 = c.delete(f"/auth/sessions/{sessions[0]['id']}")
+    assert r2.status_code == 200
+    # revoked its own current session — /auth/me now fails
+    assert c.get("/auth/me").status_code == 401
