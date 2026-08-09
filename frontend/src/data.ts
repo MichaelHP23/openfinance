@@ -8,6 +8,7 @@ export type Account = {
   institution: string | null;
   balance: string;
   currency: string;
+  beneficiary: string | null;
 };
 
 export type Txn = {

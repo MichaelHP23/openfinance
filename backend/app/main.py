@@ -10,12 +10,17 @@ from app.api import (
     categories,
     category_rules,
     connections,
+    documents,
+    estate,
+    export,
     forecast,
     goals,
     imports,
     insights,
     investments,
     recurring,
+    reports,
+    tax,
     transactions,
 )
 from app.api.deps import limiter
@@ -72,11 +77,16 @@ app.include_router(category_rules.router)
 app.include_router(transactions.router)
 app.include_router(imports.router)
 app.include_router(connections.router)
+app.include_router(documents.router)
+app.include_router(estate.router)
+app.include_router(export.router)
 app.include_router(forecast.router)
 app.include_router(goals.router)
 app.include_router(insights.router)
 app.include_router(investments.router)
 app.include_router(recurring.router)
+app.include_router(reports.router)
+app.include_router(tax.router)
 
 
 @app.get("/health")

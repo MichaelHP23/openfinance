@@ -9,6 +9,7 @@ const acct = (type: string, balance: string): Account => ({
   institution: null,
   balance,
   currency: "USD",
+  beneficiary: null,
 });
 
 const txn = (posted_at: string, amount: string, merchant_raw = "X"): Txn => ({
