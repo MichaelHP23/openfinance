@@ -1,7 +1,7 @@
 import enum
 import uuid
 
-from sqlalchemy import Enum, ForeignKey, String
+from sqlalchemy import Boolean, Enum, ForeignKey, LargeBinary, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -22,3 +22,7 @@ class User(Base, UUIDMixin, TimestampMixin):
     email: Mapped[str] = mapped_column(String, unique=True, index=True)
     password_hash: Mapped[str] = mapped_column()
     role: Mapped[Role] = mapped_column(Enum(Role, name="role"), default=Role.owner)
+    # Envelope-encrypted with app.core.encryption (same AES-GCM scheme as provider
+    # credentials and vault documents) — never stored or logged in the clear.
+    totp_secret: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    totp_enabled: Mapped[bool] = mapped_column(Boolean, default=False)

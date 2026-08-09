@@ -1,5 +1,6 @@
 # Import every model module so Base.metadata is complete for create_all / Alembic autogen.
 from app.models.account import Account, AccountType  # noqa: F401
+from app.models.audit_event import AuditEvent  # noqa: F401
 from app.models.budget import Budget  # noqa: F401
 from app.models.category import Category  # noqa: F401
 from app.models.category_rule import CategoryRule, MatchType, RuleSource  # noqa: F401
@@ -7,6 +8,7 @@ from app.models.connection import ConnStatus, Provider, ProviderConnection  # no
 from app.models.document import Document, DocumentKind  # noqa: F401
 from app.models.goal import Goal, GoalAccount, GoalKind, GoalStatus  # noqa: F401
 from app.models.household import Household  # noqa: F401
+from app.models.household_invite import HouseholdInvite  # noqa: F401
 from app.models.recurring import Cadence, RecurringSeries, SeriesStatus  # noqa: F401
 from app.models.security import Security  # noqa: F401
 from app.models.security_price import SecurityPrice  # noqa: F401

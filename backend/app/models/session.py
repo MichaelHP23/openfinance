@@ -15,3 +15,7 @@ class UserSession(Base, UUIDMixin, TimestampMixin):
     )
     token_hash: Mapped[str] = mapped_column(unique=True, index=True)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    # Touched on every resolved request. NULL means "never resolved since issue" —
+    # resolve_session falls back to created_at, so a freshly issued session isn't
+    # treated as already idle.
+    last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
