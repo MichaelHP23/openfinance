@@ -23,7 +23,7 @@ Each phase gets its own implementation plan, written via `superpowers:writing-pl
 | Capability | Where |
 |---|---|
 | Auth — email+password, argon2id hashing, server-side sessions (30-day TTL, sha256-hashed token in a cookie) | `backend/app/services/auth.py`, `app/models/session.py`, `app/core/security.py` |
-| `Role` enum with `owner`/`member` already defined on `User`, but **no code path checks it** — every authenticated user can do everything their household owns | `backend/app/models/user.py:11-13` |
+| `Role` enum with `owner`/`member`/`viewer` already defined on `User`, but **no code path checks it and no invite/join flow exists** — `auth.register` always creates a brand-new household with the registrant as `owner`, so `member`/`viewer` can never be assigned today | `backend/app/models/user.py:11-14`, `backend/app/services/auth.py:24-38` |
 | `LOCAL_MODE` — single-household desktop mode, zero authentication, gated to `ENVIRONMENT=development` | `backend/app/main.py:33-40`, `app/api/deps.py:_local_user` |
 | CSRF mitigation — `SameSite=Lax` cookie only, no double-submit token anywhere in `app/` | grep of `app/` for `csrf`/`CSRF`/`SameSite` — zero hits beyond cookie config |
 | Rate limiting — `slowapi` `Limiter`, keyed by remote address, backed by Redis | `backend/app/api/deps.py:14` |
@@ -41,11 +41,13 @@ Each phase gets its own implementation plan, written via `superpowers:writing-pl
 
 ### 2.1 CSRF — double-submit token
 
-`SameSite=Lax` blocks classic cross-site form CSRF but not same-site subdomain attacks or older browsers. Add the double-submit pattern M0 deferred:
+`SameSite=Lax` blocks classic cross-site form CSRF but not same-site subdomain attacks or older browsers. Add the double-submit pattern M0 deferred, as an **ASGI middleware** rather than a per-route `Depends` — a route-level dependency can't cleanly see the HTTP method to skip GETs, and a middleware is one place a new mutating endpoint can't forget to wire up:
 
-- `GET /auth/csrf` issues a random token, set as a **second**, non-httpOnly cookie (`csrf_token`) so the frontend can read it and echo it back.
-- Every mutating request (`POST`/`PATCH`/`PUT`/`DELETE`) must carry `X-CSRF-Token` matching the cookie, checked in a dependency (`require_csrf`) applied at the router-include level in `main.py`, not per-endpoint — a new mutating endpoint must be unable to forget it.
-- `LOCAL_MODE` skips this: no cross-origin risk when there's no session to steal.
+- On any response where the `csrf_token` cookie is missing, the middleware issues one — a random token, non-httpOnly (the frontend must read it), `SameSite=Lax`. No separate `GET /auth/csrf` endpoint: the first page load already fires a GET (`/auth/me`), so the cookie exists before any form could submit.
+- Every mutating request (`POST`/`PATCH`/`PUT`/`DELETE`) must carry `X-CSRF-Token` matching the cookie (`secrets.compare_digest`), or the middleware returns 403 before the route ever runs.
+- Exempt paths: `/auth/register`, `/auth/login`, `/auth/join` (§2.4) — none of them has a session yet to protect, and the double-submit pattern has nothing to compare until one exists.
+- `LOCAL_MODE` skips the whole check: no cross-origin risk when there's no session to steal.
+- Frontend: `frontend/src/api/client.ts`'s single `apiFetch` reads the cookie and attaches the header for every non-GET call. One choke point — every mutation in the app already routes through it.
 
 ### 2.2 Session hardening
 
@@ -60,13 +62,31 @@ Each phase gets its own implementation plan, written via `superpowers:writing-pl
 - `POST /auth/2fa/verify` confirms enrollment with a code; `POST /auth/login` becomes two-step when `totp_enabled` is true — password first, then a short-lived pre-auth token exchanged for a real session on a correct code.
 - **Cut: backup/recovery codes.** Real value, but it's a second secret-storage path with its own consumption/regeneration lifecycle — worth its own follow-up once TOTP itself is proven out, not bundled into the same phase.
 
-### 2.4 RBAC — make `Role` mean something
+### 2.4 Household invites, and RBAC that actually means something
 
-`owner`/`member` already exists on every `User` row and is currently decorative. Define what each can do, narrowly:
+**Correction to this spec's first draft:** `Role` (`owner`/`member`/`viewer` — `backend/app/models/user.py:11-14`) exists on every `User` row, but verified against the tree, there is no invite or join flow anywhere. `auth.register` always creates a **new** household and makes the registrant its `owner` (`backend/app/services/auth.py:24-38`). `member` and `viewer` are enum values nothing has ever assigned. RBAC enforcement without a way to reach a second role would be gates a test can exercise only by hand-constructing a `User(role=member)` row — dead code from every real user's perspective. P6 builds the invite flow so the gates it also builds are reachable.
 
-- `member` can read everything in the household and write transactions/categories/budgets/goals — the day-to-day.
-- Only `owner` can: invite/remove members, revoke another member's sessions, delete the household, manage provider connections (bank credentials), access the document vault and tax export (P5).
-- One dependency, `require_owner`, alongside the existing `require_household` — same shape, added where it's needed, not a general policy engine. A permissions matrix table is **cut**: two roles and roughly six owner-gated endpoints don't justify one.
+**Invites — a shareable link, not an email.** No SMTP or mail-sending infrastructure exists anywhere in the app, and this is a self-hosted, single-operator product whose own login page already pitches "no third party watching your spending" — adding a mail relay dependency for one feature cuts against that. The owner generates a link and shares it themselves (Slack, text, whatever they'd already use).
+
+```
+household_invites
+  id, household_id (FK, indexed)
+  role         enum: member                 -- see below on why `viewer` isn't offered here
+  token_hash   text (sha256, same pattern as UserSession.token_hash)
+  created_by   UUID FK users
+  expires_at   timestamptz          -- 7 days
+  used_at      timestamptz NULL
+  created_at
+```
+
+- `POST /auth/invites` (owner-only, no body — every invite is `role=member`) → creates a row, returns the **raw** token once (never stored, never retrievable again — same shape as an API key). The frontend renders it as a copyable link: `{origin}/join/{token}`.
+- `GET /auth/invites` (owner-only) → pending invites: role, created_at, expires_at, used_at.
+- `DELETE /auth/invites/{id}` (owner-only) → revoke an unused invite.
+- `POST /auth/join {token, email, password}` → validates the token (exists, unexpired, unused), creates the `User` **in the invite's `household_id`** with role `member` — `auth.register` with the household supplied instead of created — marks `used_at`, issues a session. Exempt from CSRF (§2.1): no session exists yet.
+
+**RBAC.** `member` reads everything in the household and writes the day-to-day (transactions, categories, budgets, goals) — the role this phase makes reachable. Only `owner` can: manage invites, revoke another user's sessions, delete the household, manage provider connections (bank credentials), reach the document vault and tax export (P5), read the audit log (§2.7). One dependency, `require_owner`, same shape as the existing `require_household` — added at each gated route, not a general policy engine. A permissions matrix table is **cut**: two reachable roles and a dozen or so owner-gated endpoints don't justify one.
+
+**`viewer` is cut from this phase, not wired up.** The enum value already exists on `Role` (`backend/app/models/user.py:13`) from before this plan, but making it mean "read, never write" honestly requires a `require_writer` check added to every mutating endpoint across the whole app — accounts, transactions, categories, budgets, goals, connections, documents, everything — which is a cross-cutting change well past "make the invite flow reachable" and was not part of the design this spec's own §0 scoped. `POST /auth/invites` only ever issues `member` invites; `viewer` stays an enum value nothing assigns, same as today, until it's its own scoped phase.
 
 ### 2.5 OAuth providers — cut from this phase
 
@@ -78,13 +98,13 @@ Same reasoning as OAuth, doubled: WebAuthn is a genuinely large surface (attesta
 
 ### 2.7 Audit log
 
-- `audit_events` table: `id`, `household_id`, `user_id`, `action` (text — `"session.revoked"`, `"vault.document_downloaded"`, `"connection.deleted"`, etc.), `metadata` (JSONB, small), `created_at`. Append-only, no update path.
-- Write calls added at the small set of sensitive points: login, session revoke, role change, document download/delete, provider connection add/delete. Not every mutation — a log of every `PATCH /transactions/{id}` is noise, not audit trail.
+- `audit_events` table: `id`, `household_id`, `user_id`, `action` (text — `"session.revoked"`, `"invite.accepted"`, `"vault.document_downloaded"`, `"connection.deleted"`, etc.), `metadata` (JSONB, small), `created_at`. Append-only, no update path.
+- Write calls added at the small set of sensitive points: login, session revoke, invite created/revoked/accepted, 2FA enrolled, document download/delete, provider connection add/delete. Not every mutation — a log of every `PATCH /transactions/{id}` is noise, not audit trail.
 - `GET /audit-log?since=&action=` — owner-only, paginated.
 
-**Tests** — CSRF rejected without token / with mismatched token, CSRF skipped in `LOCAL_MODE`, session rotation invalidates the old token, idle timeout rejects a stale-but-not-expired session, TOTP enroll→verify→login round trip, wrong TOTP code rejected with rate limiting (reuse the existing `slowapi` limiter, don't build a second one), `member` blocked from an owner-only route with 403 not 500, audit log entries carry no plaintext secrets.
+**Tests** — CSRF rejected without token / with mismatched token, CSRF skipped in `LOCAL_MODE` and on `/auth/register`/`/auth/login`/`/auth/join`, session rotation invalidates the old token, idle timeout rejects a stale-but-not-expired session, TOTP enroll→verify→login round trip, wrong TOTP code rejected with rate limiting (reuse the existing `slowapi` limiter, don't build a second one), an expired or already-used invite token is rejected, a joined `member` lands in the inviting household (not a new one) and is blocked from an owner-only route with 403 not 500, audit log entries carry no plaintext secrets.
 
-**Cut, restated:** OAuth, passkeys, backup codes, a general permissions matrix, per-field audit diffing.
+**Cut, restated:** OAuth, passkeys, backup codes, a general permissions matrix, per-field audit diffing, `viewer` enforcement (§2.4), email delivery of invites.
 
 ---
 
