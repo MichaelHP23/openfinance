@@ -11,6 +11,7 @@ import { TransactionsPage } from "./pages/TransactionsPage";
 import { RecurringPage } from "./pages/RecurringPage";
 import { BudgetsPage } from "./pages/BudgetsPage";
 import { GoalsPage } from "./pages/GoalsPage";
+import { ReportsPage } from "./pages/ReportsPage";
 import { Shell } from "./ui/Shell";
 
 const qc = new QueryClient();
@@ -104,6 +105,14 @@ export default function App() {
             element={
               <Protected>
                 <BudgetsPage />
+              </Protected>
+            }
+          />
+          <Route
+            path="/reports/*"
+            element={
+              <Protected>
+                <ReportsPage />
               </Protected>
             }
           />
