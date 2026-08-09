@@ -2,6 +2,28 @@
 
 ## [Unreleased] — Origin parity program
 
+## P5 (reports, tax, and the document vault)
+
+### Added
+- `services/reports.py`: spending grouped by category, merchant, or month; income vs.
+  expense over a trailing window; a year-in-review summary reusing
+  `services/snapshots.py` for its net worth delta.
+- `services/tax.py`: a from-scratch FIFO lot-matching replay over the trade log,
+  separate from `services/portfolio.py`'s average-cost engine; a dividend/interest
+  summary from categorized transactions; a Schedule-D-shaped CSV export that discloses
+  wash sales are not handled.
+- `documents` table and `services/documents.py`: an encrypted vault reusing the
+  AES-GCM envelope already sealing provider credentials. Files are decrypted only in
+  memory, only for a download.
+- `accounts.beneficiary`, a nullable column.
+- `services/estate.py`: a computed estate-readiness checklist — will on file,
+  beneficiary on every retirement account, a deed for every property account. No
+  storage of its own, and no document generation.
+- `GET /export/all.zip`: every table the household owns, one CSV per table, enumerated
+  from the model registry so a new table is a test failure until it's routed.
+- Frontend: a Reports page with spending, cash-flow, year-in-review, tax, and vault
+  tabs.
+
 ## P3 (goals and cash-flow forecast) — on its own branch, not yet merged
 
 ### Added

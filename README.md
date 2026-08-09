@@ -83,6 +83,20 @@ npm run lint
   check that shows what a hypothetical purchase does to the projection and whether
   the balance stays non-negative. (The API also computes the impact on every active
   goal's projected date; the UI doesn't surface that part yet.)
+- **Reports** — spending by category, merchant, or month; income vs. expense over the
+  trailing year; a year-in-review summary (savings rate, biggest category, biggest
+  single transaction, subscriptions started and cancelled, net worth change).
+- **Tax reporting** — FIFO realized gains from the trade log, a dividend/interest
+  summary from categorized transactions, and a Schedule-D-shaped CSV export. Reporting
+  only: no filing, no advice, and wash-sale detection is explicitly not implemented —
+  the export says so on its own page.
+- **Document vault** — upload a will, a deed, an insurance policy; files are encrypted
+  with the same AES-GCM envelope that already protects bank credentials, and only ever
+  decrypted, in memory, for the moment you download them. A computed estate-readiness
+  checklist reports gaps (a will on file? a beneficiary on every retirement account? a
+  deed for every property?) — it never drafts a document.
+- **Export everything** — `GET /export/all.zip` is every table the household owns, one
+  CSV per table, straight from the schema.
 - Local mode (no login) or full email/password auth: argon2id, server-side sessions,
   rate limits.
 - `BankProvider` protocol with a `ManualProvider`; credentials sealed with AES-GCM
@@ -164,7 +178,8 @@ so a day that isn't recorded is lost. Set the interval to `0` to disable.
 
 ## Not here yet
 
-- Reports. See the roadmap in `docs/superpowers/specs/2026-07-30-origin-parity-design.md`.
+- See the roadmap in `docs/superpowers/specs/2026-07-30-origin-parity-design.md` for
+  anything still listed there.
 - Scheduled background syncing — for now, syncing is a button.
 - Editing or deleting an account from the UI.
 
