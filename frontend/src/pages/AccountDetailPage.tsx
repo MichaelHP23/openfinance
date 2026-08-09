@@ -97,6 +97,7 @@ export function AccountDetailPage() {
                 name: String(form.get("name")),
                 type: String(form.get("type")),
                 institution: String(form.get("institution")),
+                beneficiary: String(form.get("beneficiary")),
               });
             }}
             className="flex flex-wrap items-end gap-3"
@@ -118,6 +119,10 @@ export function AccountDetailPage() {
             <label className="flex flex-col gap-1.5">
               <span className="label">Institution</span>
               <input name="institution" defaultValue={account.institution ?? ""} />
+            </label>
+            <label className="flex flex-col gap-1.5">
+              <span className="label">Beneficiary</span>
+              <input name="beneficiary" defaultValue={account.beneficiary ?? ""} placeholder="Optional" />
             </label>
             <button className="btn" disabled={save.isPending}>
               {save.isPending ? "Saving…" : "Save"}
