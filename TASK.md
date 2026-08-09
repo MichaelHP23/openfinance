@@ -2,32 +2,50 @@
 
 **Program:** Origin parity — build what [Origin Financial](https://useorigin.com/) sells,
 minus the three pillars that need a vendor or a license, minus credit-score monitoring.
+**Shipped and merged to `main` as of 2026-08-09** (P1–P5, see Phase status below).
 
-**Spec:** `docs/superpowers/specs/2026-07-30-origin-parity-design.md` — approved.
-Read it before touching any phase. It records what was cut and why, which matters more
-than what was kept.
+**Next program:** Post-parity roadmap — auth hardening, mobile/PWA, and a plugin system
+(the three M0 milestones the origin-parity program left untouched).
+
+**Spec:** `docs/superpowers/specs/2026-07-30-origin-parity-design.md` for P1–P5 (closed).
+`docs/superpowers/specs/2026-08-09-post-parity-roadmap-design.md` for P6–P8 (current).
+Read the relevant one before touching any phase. Both record what was cut and why, which
+matters more than what was kept.
 
 ## Phase status
 
 | Phase | What it is | Plan | State |
 |---|---|---|---|
-| **P1** | Categorization engine — rules, system taxonomy, auto-apply, backfill | `docs/superpowers/plans/2026-07-30-p1-categorization.md` | **Done on branch `p1-categorization`, not yet merged to `main`.** All 12 tasks landed: taxonomy/rule model, matching engine, backfill/uncategorized rollup, CRUD + reorder + preview endpoints, wiring into CSV import and sync, LLM suggestions (propose-only), and the transactions-page UI. See `.superpowers/sdd/2026-07-30-p1-categorization/progress.md` for deferred minors. |
-| P2 | Budgets — monthly, rollover on read, median suggest | not yet written | Blocked on P1 |
-| P3 | Goals + daily cash-flow forecast + `can_i_afford` | not yet written | Blocked on P2 |
-| P4 | AI advisor v2 — read-only tool calling, visible call trace | not yet written | Blocked on P1–P3 |
-| P5 | Reports, FIFO realized gains, encrypted document vault, full export | not yet written | Independent, scheduled last |
+| P1 | Categorization engine — rules, system taxonomy, auto-apply, backfill | `docs/superpowers/plans/2026-07-30-p1-categorization.md` | **Shipped, merged to `main`.** |
+| P2 | Budgets — monthly, rollover on read, median suggest | `docs/superpowers/plans/2026-07-31-p2-budgets.md` | **Shipped, merged to `main`.** |
+| P3 | Goals + daily cash-flow forecast + `can_i_afford` | `docs/superpowers/plans/2026-08-01-p3-goals-forecast.md` | **Shipped, merged to `main`.** |
+| P4 | AI advisor v2 — read-only tool calling, visible call trace | `docs/superpowers/plans/2026-08-01-p4-ai-advisor-v2.md` | **Shipped, merged to `main`** 2026-08-09 (was on branch `p4-ai-advisor-v2`). |
+| P5 | Reports, FIFO realized gains, encrypted document vault, full export | `docs/superpowers/plans/2026-08-01-p5-reports-tax-vault.md` | **Shipped, merged to `main`** 2026-08-09 (was on branch `p5-reports-tax-vault`). |
+| **P6** | Auth hardening — CSRF, session rotation/revoke, TOTP 2FA, RBAC enforcement, audit log | not yet written | **Starting now.** Independent of P7/P8. |
+| P7 | Mobile/PWA — installable, offline read cache, fixes the pre-existing `mobile.spec.ts` bug | not yet written | Independent, queued after P6 |
+| P8 | Plugin system | not yet written | Blocked on a written answer to the post-parity spec's §5.3 scope check — may be deferred indefinitely |
 
-Phases are strictly sequential. Each phase's full test suite must pass before the next
-begins.
+P1–P5 were strictly sequential; that constraint doesn't apply to P6–P8, which have no
+data-model dependencies on each other (see post-parity spec §6). They're being done in
+value order, not dependency order.
 
-## Starting P1
+## Starting P6
 
-The plan is 12 tasks, each ending in a commit. Execute it with
-`superpowers:subagent-driven-development` (fresh subagent per task) or
-`superpowers:executing-plans` (inline, batched). Do not freelance around the plan —
-it encodes decisions from the spec that are not obvious from the code.
+Read `docs/superpowers/specs/2026-08-09-post-parity-roadmap-design.md` §2 before writing
+the implementation plan. Ground truth already verified there against the tree: sessions
+are a sha256-hashed token in an httpOnly cookie with a 30-day TTL
+(`backend/app/services/auth.py`), there is no CSRF token anywhere (`SameSite=Lax` only),
+`User.role` (`owner`/`member`) exists but nothing checks it yet, and `LOCAL_MODE` has zero
+authentication by design (`app/main.py:33-40`) — P6 must not add friction to that path.
 
-Read these before the first task:
+Write the implementation plan with `superpowers:writing-plans`, following the format of
+`docs/superpowers/plans/2026-07-30-p1-categorization.md` (the shipped exemplar
+`PLAN-CONSTRAINTS.md` names), then execute it with `superpowers:subagent-driven-development`
+or `superpowers:executing-plans`. Do not freelance around the plan.
+
+## Starting P1 (historical — kept for the file paths and invariants, still accurate)
+
+Read these before touching categorization-adjacent code:
 
 - `backend/app/models/category.py` — the table has existed since M0 and is empty.
   `transactions.category_id` already points at it. P1 fills a hole, it does not cut one.
@@ -49,11 +67,11 @@ Read these before the first task:
 
 ## The lint gates do not currently pass, and that is not your change
 
-`ruff check app tests` reports **129 errors**; `mypy app` reports **24**. All pre-existing,
-none from P1. They live in `app/services/portfolio.py`, `app/services/trade_import.py`,
-`app/core/scheduler.py`, and `tests/test_trades.py` — mostly `FURB157`
-(`Decimal("1")` → `Decimal(1)`) and a cluster of real `object`-typed arithmetic in
-`portfolio.py` that mypy is right about.
+`ruff check app tests` reports **174 errors** (as of 2026-08-09, after P4/P5 merged —
+was 129 before); `mypy app` reports **24**. All pre-existing. They live in
+`app/services/portfolio.py`, `app/services/trade_import.py`, `app/core/scheduler.py`, and
+`tests/test_trades.py` — mostly `FURB157` (`Decimal("1")` → `Decimal(1)`) and a cluster of
+real `object`-typed arithmetic in `portfolio.py` that mypy is right about.
 
 So the working gate is **"no new errors in the files you touched"**, not "clean". Check by
 running the tool before and after your change. 122 of the ruff errors are `--fix`-able in
