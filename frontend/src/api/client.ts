@@ -10,11 +10,26 @@ const inferred =
 
 export const API_BASE = import.meta.env.VITE_API_URL || inferred;
 
+function readCookie(name: string): string | null {
+  const match = document.cookie.match(new RegExp(`(?:^|; )${name}=([^;]*)`));
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
 export async function apiFetch<T>(path: string, opts: RequestInit = {}): Promise<T> {
+  const method = (opts.method ?? "GET").toUpperCase();
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    ...(opts.headers as Record<string, string> | undefined),
+  };
+  if (method !== "GET" && method !== "HEAD") {
+    const token = readCookie("csrf_token");
+    if (token) headers["X-CSRF-Token"] = token;
+  }
+
   const res = await fetch(`${API_BASE}${path}`, {
     ...opts,
     credentials: "include",
-    headers: { "Content-Type": "application/json", ...opts.headers },
+    headers,
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));

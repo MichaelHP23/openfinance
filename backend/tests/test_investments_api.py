@@ -2,13 +2,13 @@ import uuid
 from decimal import Decimal
 
 import pytest
-from fastapi.testclient import TestClient
 
 from app.api.deps import require_household
 from app.core.db import get_db
 from app.main import app
 from app.models.account import Account, AccountType
 from app.models.household import Household
+from tests.csrf_helper import csrf_client
 
 app.state.limiter.enabled = False
 
@@ -30,8 +30,7 @@ def _account(db, hid, name="Brokerage") -> Account:
 
 @pytest.fixture
 def api(db):
-    app.dependency_overrides[get_db] = lambda: db
-    client = TestClient(app)
+    client = csrf_client(app, db, get_db)
     yield client
     app.dependency_overrides.pop(get_db, None)
     app.dependency_overrides.pop(require_household, None)

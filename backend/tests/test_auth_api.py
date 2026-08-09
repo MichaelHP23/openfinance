@@ -2,13 +2,13 @@ from fastapi.testclient import TestClient
 
 from app.core.db import get_db
 from app.main import app
+from tests.csrf_helper import csrf_client
 
 app.state.limiter.enabled = False
 
 
 def client(db):
-    app.dependency_overrides[get_db] = lambda: db
-    return TestClient(app)
+    return csrf_client(app, db, get_db)
 
 
 def test_register_login_me_flow(db):

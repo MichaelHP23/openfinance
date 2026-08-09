@@ -25,6 +25,7 @@ from app.api import (
 )
 from app.api.deps import limiter
 from app.core.config import DEFAULT_SECRET_KEY, settings
+from app.core.csrf import CSRFMiddleware
 from app.core.scheduler import lifespan
 
 if settings.app_secret_key == DEFAULT_SECRET_KEY:
@@ -67,6 +68,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(CSRFMiddleware)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # type: ignore[arg-type]
 app.include_router(auth.router)

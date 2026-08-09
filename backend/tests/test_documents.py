@@ -12,6 +12,7 @@ from app.main import app
 from app.models.document import Document, DocumentKind
 from app.models.household import Household
 from app.services import documents
+from tests.csrf_helper import csrf_client
 
 app.state.limiter.enabled = False
 
@@ -144,9 +145,8 @@ def test_delete_of_unknown_document_returns_false(db, household):
 
 @pytest.fixture
 def client(db, household):
-    app.dependency_overrides[get_db] = lambda: db
     app.dependency_overrides[require_household] = lambda: household.id
-    yield TestClient(app)
+    yield csrf_client(app, db, get_db)
     app.dependency_overrides.pop(get_db, None)
     app.dependency_overrides.pop(require_household, None)
 
@@ -189,9 +189,8 @@ def test_delete_then_download_404s(client):
 
 
 def test_a_document_from_another_household_is_not_downloadable(db, household, other_household):
-    app.dependency_overrides[get_db] = lambda: db
     app.dependency_overrides[require_household] = lambda: household.id
-    mine = TestClient(app)
+    mine = csrf_client(app, db, get_db)
     uploaded = _upload(mine).json()
 
     app.dependency_overrides[require_household] = lambda: other_household.id

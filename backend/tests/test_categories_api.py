@@ -3,7 +3,6 @@ from datetime import UTC, datetime
 from decimal import Decimal
 
 import pytest
-from fastapi.testclient import TestClient
 
 from app.api.deps import require_household
 from app.core.db import get_db
@@ -13,6 +12,7 @@ from app.models.household import Household
 from app.models.transaction import Transaction
 from app.services import categorization
 from app.services.categories import ensure_system_categories, system_category_id
+from tests.csrf_helper import csrf_client
 
 app.state.limiter.enabled = False
 
@@ -40,9 +40,8 @@ def account(db, household):
 
 @pytest.fixture
 def client(db, household):
-    app.dependency_overrides[get_db] = lambda: db
     app.dependency_overrides[require_household] = lambda: household.id
-    yield TestClient(app)
+    yield csrf_client(app, db, get_db)
     app.dependency_overrides.pop(get_db, None)
     app.dependency_overrides.pop(require_household, None)
 
