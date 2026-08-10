@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
-import { useSessions, useChangePassword } from "./settings";
+import { useSessions, useChangePassword, useCreateInvite, useAuditLog } from "./settings";
 
 function wrapper({ children }: { children: ReactNode }) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -34,5 +34,32 @@ describe("useChangePassword", () => {
     const [url, init] = spy.mock.calls[0];
     expect(String(url)).toContain("/auth/password");
     expect(init?.method).toBe("POST");
+  });
+});
+
+describe("useCreateInvite", () => {
+  it("posts to /auth/invites", async () => {
+    const spy = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ id: "1", token: "raw-token", expires_at: "2026-08-16" }), {
+          status: 200,
+        }),
+    );
+    vi.stubGlobal("fetch", spy);
+    const { result } = renderHook(() => useCreateInvite(), { wrapper });
+    const invite = await result.current.mutateAsync();
+    expect(invite.token).toBe("raw-token");
+  });
+});
+
+describe("useAuditLog", () => {
+  it("fetches the audit log", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(JSON.stringify([{ id: "1", action: "session.login" }]), { status: 200 })),
+    );
+    const { result } = renderHook(() => useAuditLog(), { wrapper });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data?.[0].action).toBe("session.login");
   });
 });

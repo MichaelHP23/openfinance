@@ -13,6 +13,7 @@ import { BudgetsPage } from "./pages/BudgetsPage";
 import { GoalsPage } from "./pages/GoalsPage";
 import { ReportsPage } from "./pages/ReportsPage";
 import { SettingsPage } from "./pages/SettingsPage";
+import { JoinPage } from "./pages/JoinPage";
 import { Shell } from "./ui/Shell";
 
 const qc = new QueryClient();
@@ -45,6 +46,7 @@ export default function App() {
         <Routes>
           <Route path="/login" element={<AuthRoute mode="login" />} />
           <Route path="/register" element={<AuthRoute mode="register" />} />
+          <Route path="/join/:token" element={<JoinPage />} />
           <Route
             path="/"
             element={

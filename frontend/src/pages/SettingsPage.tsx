@@ -10,6 +10,10 @@ import {
   useChangePassword,
   useEnroll2FA,
   useVerify2FA,
+  useInvites,
+  useCreateInvite,
+  useRevokeInvite,
+  useAuditLog,
 } from "../auth/settings";
 
 type Me = { role: string };
@@ -141,6 +145,77 @@ function TwoFACard() {
   );
 }
 
+function InvitesCard() {
+  const { data: invites } = useInvites();
+  const create = useCreateInvite();
+  const revoke = useRevokeInvite();
+  const [link, setLink] = useState<string | null>(null);
+
+  const onCreate = async () => {
+    const invite = await create.mutateAsync();
+    setLink(`${window.location.origin}/join/${invite.token}`);
+  };
+
+  return (
+    <Card>
+      <h2 className="mb-3 font-display text-xl">Household invites</h2>
+      <p className="mb-3 text-sm text-muted">
+        Share a link to add another member — no email is sent, you send it yourself.
+      </p>
+      {link && (
+        <div className="mb-3 flex items-center gap-2 rounded-lg border border-line p-2 text-xs">
+          <code className="flex-1 break-all">{link}</code>
+          <button className="btn-ghost" onClick={() => navigator.clipboard.writeText(link)}>
+            Copy
+          </button>
+        </div>
+      )}
+      <button className="btn mb-4 w-fit" onClick={onCreate}>
+        Generate invite link
+      </button>
+      {!invites?.length ? (
+        <Empty>No pending invites.</Empty>
+      ) : (
+        <ul className="flex flex-col gap-2">
+          {invites.map((i) => (
+            <li key={i.id} className="flex items-center justify-between text-sm">
+              <span>
+                {i.used_at ? "Used" : `Expires ${new Date(i.expires_at).toLocaleDateString()}`}
+              </span>
+              {!i.used_at && (
+                <button className="btn-ghost text-clay" onClick={() => revoke.mutate(i.id)}>
+                  Revoke
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </Card>
+  );
+}
+
+function AuditLogCard() {
+  const { data: events } = useAuditLog();
+  return (
+    <Card>
+      <h2 className="mb-3 font-display text-xl">Audit log</h2>
+      {!events?.length ? (
+        <Empty>No events recorded yet.</Empty>
+      ) : (
+        <ul className="flex flex-col gap-2">
+          {events.map((e) => (
+            <li key={e.id} className="flex items-center justify-between text-sm">
+              <span>{e.action}</span>
+              <span className="text-muted">{new Date(e.created_at).toLocaleString()}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Card>
+  );
+}
+
 export function SettingsPage() {
   const { data: me } = useMe();
 
@@ -152,8 +227,12 @@ export function SettingsPage() {
         <PasswordCard />
         <TwoFACard />
       </div>
-      {/* Household section (invites, audit log) — owner only, added in the next task. */}
-      {me?.role === "owner" && null}
+      {me?.role === "owner" && (
+        <div className="mt-5 flex flex-col gap-5">
+          <InvitesCard />
+          <AuditLogCard />
+        </div>
+      )}
     </>
   );
 }
