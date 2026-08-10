@@ -1,7 +1,12 @@
 from datetime import UTC, datetime, timedelta
 
+from app.core.db import get_db
+from app.main import app
 from app.models.household import Household
 from app.services import audit, auth
+from tests.csrf_helper import csrf_client
+
+app.state.limiter.enabled = False
 
 
 def _household(db) -> Household:
@@ -47,13 +52,6 @@ def test_metadata_defaults_to_empty_dict(db):
     user = auth.register(db, "audit4@example.com", "pw12345")
     audit.record(db, h.id, user.id, "vault.document_downloaded")
     assert audit.list_for(db, h.id)[0].event_metadata == {}
-
-
-from tests.csrf_helper import csrf_client
-from app.core.db import get_db
-from app.main import app
-
-app.state.limiter.enabled = False
 
 
 def test_audit_log_endpoint_owner_only_and_records_login(db):

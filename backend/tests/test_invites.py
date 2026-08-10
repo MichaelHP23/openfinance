@@ -16,7 +16,7 @@ def test_create_invite_returns_row_and_raw_token(db):
 
 def test_join_places_new_user_in_inviting_household_as_member(db):
     owner = auth.register(db, "owner2@example.com", "pw12345")
-    invite, raw = invites.create_invite(db, owner.household_id, owner.id)
+    _invite, raw = invites.create_invite(db, owner.household_id, owner.id)
     joined = invites.join(db, raw, "newmember@example.com", "pw12345")
     assert joined.household_id == owner.household_id
     assert joined.role.value == "member"
@@ -62,7 +62,7 @@ def test_join_still_rejects_taken_email(db):
 
 def test_revoke_invite_removes_unused_only(db):
     owner = auth.register(db, "owner7@example.com", "pw12345")
-    invite, raw = invites.create_invite(db, owner.household_id, owner.id)
+    invite, _raw = invites.create_invite(db, owner.household_id, owner.id)
     assert invites.revoke_invite(db, owner.household_id, invite.id) is True
     assert db.get(HouseholdInvite, invite.id) is None
 

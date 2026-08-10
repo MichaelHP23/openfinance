@@ -21,7 +21,7 @@ matters more than what was kept.
 | P3 | Goals + daily cash-flow forecast + `can_i_afford` | `docs/superpowers/plans/2026-08-01-p3-goals-forecast.md` | **Shipped, merged to `main`.** |
 | P4 | AI advisor v2 — read-only tool calling, visible call trace | `docs/superpowers/plans/2026-08-01-p4-ai-advisor-v2.md` | **Shipped, merged to `main`** 2026-08-09 (was on branch `p4-ai-advisor-v2`). |
 | P5 | Reports, FIFO realized gains, encrypted document vault, full export | `docs/superpowers/plans/2026-08-01-p5-reports-tax-vault.md` | **Shipped, merged to `main`** 2026-08-09 (was on branch `p5-reports-tax-vault`). |
-| **P6** | Auth hardening — CSRF, session rotation/revoke, TOTP 2FA, RBAC enforcement, audit log | not yet written | **Starting now.** Independent of P7/P8. |
+| P6 | Auth hardening — CSRF, session rotation/revoke, TOTP 2FA, RBAC enforcement, audit log | `docs/superpowers/plans/2026-08-09-p6-auth-hardening.md` | **Shipped on `worktree-p6-auth-hardening`, not yet merged to `main`.** |
 | P7 | Mobile/PWA — installable, offline read cache, fixes the pre-existing `mobile.spec.ts` bug | not yet written | Independent, queued after P6 |
 | P8 | Plugin system | not yet written | Blocked on a written answer to the post-parity spec's §5.3 scope check — may be deferred indefinitely |
 
@@ -29,19 +29,15 @@ P1–P5 were strictly sequential; that constraint doesn't apply to P6–P8, whic
 data-model dependencies on each other (see post-parity spec §6). They're being done in
 value order, not dependency order.
 
-## Starting P6
+## Starting P7
 
-Read `docs/superpowers/specs/2026-08-09-post-parity-roadmap-design.md` §2 before writing
-the implementation plan. Ground truth already verified there against the tree: sessions
-are a sha256-hashed token in an httpOnly cookie with a 30-day TTL
-(`backend/app/services/auth.py`), there is no CSRF token anywhere (`SameSite=Lax` only),
-`User.role` (`owner`/`member`) exists but nothing checks it yet, and `LOCAL_MODE` has zero
-authentication by design (`app/main.py:33-40`) — P6 must not add friction to that path.
+P6 is done: CSRF double-submit, session idle timeout + rotation on password change,
+session list/revoke, TOTP 2FA with a two-step login, shareable-link household
+invites, and owner-gated RBAC on connections/documents/tax/export/invites/audit-log.
+`Role.member` is reachable and enforced for the first time.
 
-Write the implementation plan with `superpowers:writing-plans`, following the format of
-`docs/superpowers/plans/2026-07-30-p1-categorization.md` (the shipped exemplar
-`PLAN-CONSTRAINTS.md` names), then execute it with `superpowers:subagent-driven-development`
-or `superpowers:executing-plans`. Do not freelance around the plan.
+Read `docs/superpowers/specs/2026-08-09-post-parity-roadmap-design.md` §3 before
+writing the P7 implementation plan. Independent of P6/P8 — no data-model dependency.
 
 ## Starting P1 (historical — kept for the file paths and invariants, still accurate)
 
