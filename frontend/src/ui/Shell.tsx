@@ -23,6 +23,7 @@ export const MORE = [
   { to: "/budgets", label: "Budgets", short: "Budgets", end: false, glyph: "▥" },
   { to: "/goals", label: "Goals", short: "Goals", end: false, glyph: "◎" },
   { to: "/reports", label: "Reports", short: "Reports", end: false, glyph: "▦" },
+  { to: "/settings", label: "Settings", short: "Settings", end: false, glyph: "⚙" },
 ];
 
 export function Shell({ children, localMode }: { children: ReactNode; localMode: boolean }) {

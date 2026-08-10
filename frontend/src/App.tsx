@@ -12,11 +12,12 @@ import { RecurringPage } from "./pages/RecurringPage";
 import { BudgetsPage } from "./pages/BudgetsPage";
 import { GoalsPage } from "./pages/GoalsPage";
 import { ReportsPage } from "./pages/ReportsPage";
+import { SettingsPage } from "./pages/SettingsPage";
 import { Shell } from "./ui/Shell";
 
 const qc = new QueryClient();
 
-type Me = { email: string; household_id: string; local_mode: boolean };
+type Me = { email: string; household_id: string; local_mode: boolean; role: string };
 
 function useMe() {
   return useQuery({ queryKey: ["me"], queryFn: () => apiFetch<Me>("/auth/me"), retry: false });
@@ -113,6 +114,14 @@ export default function App() {
             element={
               <Protected>
                 <ReportsPage />
+              </Protected>
+            }
+          />
+          <Route
+            path="/settings"
+            element={
+              <Protected>
+                <SettingsPage />
               </Protected>
             }
           />
