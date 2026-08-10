@@ -7,7 +7,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 import app.models  # ensure the full registry is populated
-from app.api.deps import require_household
+from app.api.deps import require_household, require_owner
 from app.core.db import get_db
 from app.main import app
 from app.models.account import Account, AccountType
@@ -43,9 +43,11 @@ def other_household(db):
 def client(db, household):
     app.dependency_overrides[get_db] = lambda: db
     app.dependency_overrides[require_household] = lambda: household.id
+    app.dependency_overrides[require_owner] = lambda: None
     yield TestClient(app)
     app.dependency_overrides.pop(get_db, None)
     app.dependency_overrides.pop(require_household, None)
+    app.dependency_overrides.pop(require_owner, None)
 
 
 def test_export_contains_a_csv_for_every_household_owned_table(client, db, household):

@@ -4,11 +4,11 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
-from app.api.deps import require_household
+from app.api.deps import require_household, require_owner
 from app.core.db import get_db
 from app.services import export
 
-router = APIRouter(prefix="/export", tags=["export"])
+router = APIRouter(prefix="/export", tags=["export"], dependencies=[Depends(require_owner)])
 
 
 @router.get("/all.zip")

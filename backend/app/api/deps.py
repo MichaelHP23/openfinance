@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.db import get_db
-from app.models.user import User
+from app.models.user import Role, User
 from app.services import auth
 
 limiter = Limiter(key_func=get_remote_address, storage_uri=settings.redis_url)
@@ -43,3 +43,11 @@ def current_user(
 
 def require_household(user: User = Depends(current_user)) -> uuid.UUID:
     return user.household_id
+
+
+def require_owner(user: User = Depends(current_user)) -> User:
+    """LOCAL_MODE's single user is always Role.owner (auth.register defaults to it),
+    so this never adds friction to that path — it only ever bites a real `member`."""
+    if user.role != Role.owner:
+        raise HTTPException(status_code=403, detail="Owner access required")
+    return user

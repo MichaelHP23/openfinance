@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from app.api.deps import require_household
+from app.api.deps import require_household, require_owner
 from app.core.config import settings
 from app.core.db import get_db
 from app.main import app
@@ -146,9 +146,11 @@ def test_delete_of_unknown_document_returns_false(db, household):
 @pytest.fixture
 def client(db, household):
     app.dependency_overrides[require_household] = lambda: household.id
+    app.dependency_overrides[require_owner] = lambda: None
     yield csrf_client(app, db, get_db)
     app.dependency_overrides.pop(get_db, None)
     app.dependency_overrides.pop(require_household, None)
+    app.dependency_overrides.pop(require_owner, None)
 
 
 def _upload(client, content=b"the whole document, byte for byte"):
@@ -190,6 +192,7 @@ def test_delete_then_download_404s(client):
 
 def test_a_document_from_another_household_is_not_downloadable(db, household, other_household):
     app.dependency_overrides[require_household] = lambda: household.id
+    app.dependency_overrides[require_owner] = lambda: None
     mine = csrf_client(app, db, get_db)
     uploaded = _upload(mine).json()
 
@@ -200,6 +203,7 @@ def test_a_document_from_another_household_is_not_downloadable(db, household, ot
 
     app.dependency_overrides.pop(get_db, None)
     app.dependency_overrides.pop(require_household, None)
+    app.dependency_overrides.pop(require_owner, None)
 
 
 def test_unknown_document_download_is_404(client):

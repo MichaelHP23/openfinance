@@ -4,7 +4,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.api.deps import require_household
+from app.api.deps import require_household, require_owner
 from app.core.db import get_db
 from app.models.connection import ProviderConnection
 from app.providers.base import get_credentials
@@ -14,7 +14,7 @@ from app.services import connections
 
 log = logging.getLogger("openfinance.connections")
 
-router = APIRouter(prefix="/connections", tags=["connections"])
+router = APIRouter(prefix="/connections", tags=["connections"], dependencies=[Depends(require_owner)])
 
 
 def _out(conn: ProviderConnection) -> ConnectionOut:

@@ -4,13 +4,13 @@ from fastapi import APIRouter, Depends, Form, HTTPException, UploadFile
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
-from app.api.deps import require_household
+from app.api.deps import require_household, require_owner
 from app.core.db import get_db
 from app.models.document import Document, DocumentKind
 from app.schemas.document import DocumentOut
 from app.services import documents
 
-router = APIRouter(prefix="/documents", tags=["documents"])
+router = APIRouter(prefix="/documents", tags=["documents"], dependencies=[Depends(require_owner)])
 
 
 def _out(doc: Document) -> DocumentOut:

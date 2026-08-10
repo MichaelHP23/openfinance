@@ -3,12 +3,15 @@ import uuid
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, Response
 from sqlalchemy.orm import Session
 
-from app.api.deps import current_user, limiter
+from app.api.deps import current_user, limiter, require_owner
 from app.core.config import settings
 from app.core.db import get_db
 from app.models.user import User
 from app.schemas.auth import (
     Credentials,
+    InviteCreateOut,
+    InviteOut,
+    JoinIn,
     LoginResult,
     PasswordChange,
     PreauthCode,
@@ -17,7 +20,7 @@ from app.schemas.auth import (
     TwoFAEnrollOut,
     UserOut,
 )
-from app.services import auth, twofa
+from app.services import auth, invites, twofa
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 COOKIE = "session"
@@ -159,5 +162,48 @@ def login_verify_2fa(
         raise HTTPException(status_code=401, detail="Invalid or expired login")
     if not twofa.verify_login_code(db, user, body.code):
         raise HTTPException(status_code=401, detail="Invalid code")
+    _set_cookie(response, auth.issue_session(db, user))
+    return _out(user)
+
+
+@router.post("/invites", response_model=InviteCreateOut)
+def create_invite(owner: User = Depends(require_owner), db: Session = Depends(get_db)) -> InviteCreateOut:
+    invite, raw = invites.create_invite(db, owner.household_id, owner.id)
+    return InviteCreateOut(id=invite.id, token=raw, expires_at=invite.expires_at)
+
+
+@router.get("/invites", response_model=list[InviteOut])
+def list_invites_route(
+    owner: User = Depends(require_owner), db: Session = Depends(get_db)
+) -> list[InviteOut]:
+    return [
+        InviteOut(
+            id=i.id, role=i.role.value, created_at=i.created_at,
+            expires_at=i.expires_at, used_at=i.used_at,
+        )
+        for i in invites.list_invites(db, owner.household_id)
+    ]
+
+
+@router.delete("/invites/{invite_id}")
+def revoke_invite_route(
+    invite_id: uuid.UUID, owner: User = Depends(require_owner), db: Session = Depends(get_db)
+) -> dict[str, str]:
+    if not invites.revoke_invite(db, owner.household_id, invite_id):
+        raise HTTPException(status_code=404, detail="Invite not found")
+    return {"status": "ok"}
+
+
+@router.post("/join", response_model=UserOut)
+@limiter.limit("10/minute")
+def join(
+    body: JoinIn, request: Request, response: Response, db: Session = Depends(get_db)
+) -> UserOut:
+    try:
+        user = invites.join(db, body.token, body.email, body.password)
+    except invites.InvalidInvite:
+        raise HTTPException(status_code=400, detail="Invite is invalid, expired, or already used")
+    except auth.EmailTaken:
+        raise HTTPException(status_code=409, detail="Email already registered")
     _set_cookie(response, auth.issue_session(db, user))
     return _out(user)

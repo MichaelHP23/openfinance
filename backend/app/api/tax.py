@@ -4,12 +4,12 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
-from app.api.deps import require_household
+from app.api.deps import require_household, require_owner
 from app.core.db import get_db
 from app.schemas.tax import IncomeSummaryOut, RealizedGainOut, RealizedGainsOut
 from app.services import tax
 
-router = APIRouter(prefix="/tax", tags=["tax"])
+router = APIRouter(prefix="/tax", tags=["tax"], dependencies=[Depends(require_owner)])
 
 
 @router.get("/realized-gains", response_model=RealizedGainsOut)
