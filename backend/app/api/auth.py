@@ -20,7 +20,7 @@ from app.schemas.auth import (
     TwoFAEnrollOut,
     UserOut,
 )
-from app.services import auth, invites, twofa
+from app.services import audit, auth, invites, twofa
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 COOKIE = "session"
@@ -71,6 +71,7 @@ def login(
     if user.totp_enabled:
         return LoginResult(status="totp_required", preauth_token=twofa.issue_preauth(user))
     _set_cookie(response, auth.issue_session(db, user))
+    audit.record(db, user.household_id, user.id, "session.login")
     return LoginResult(status="ok", user=_out(user))
 
 
@@ -122,6 +123,7 @@ def revoke_session(
 ) -> dict[str, str]:
     if not auth.revoke_session(db, user.id, session_id):
         raise HTTPException(status_code=404, detail="Session not found")
+    audit.record(db, user.household_id, user.id, "session.revoked", {"session_id": str(session_id)})
     return {"status": "ok"}
 
 
@@ -148,6 +150,7 @@ def verify_2fa(
 ) -> dict[str, str]:
     if not twofa.confirm_enrollment(db, user, body.code):
         raise HTTPException(status_code=400, detail="Invalid code")
+    audit.record(db, user.household_id, user.id, "2fa.enrolled")
     return {"status": "ok"}
 
 
@@ -163,12 +166,14 @@ def login_verify_2fa(
     if not twofa.verify_login_code(db, user, body.code):
         raise HTTPException(status_code=401, detail="Invalid code")
     _set_cookie(response, auth.issue_session(db, user))
+    audit.record(db, user.household_id, user.id, "session.login")
     return _out(user)
 
 
 @router.post("/invites", response_model=InviteCreateOut)
 def create_invite(owner: User = Depends(require_owner), db: Session = Depends(get_db)) -> InviteCreateOut:
     invite, raw = invites.create_invite(db, owner.household_id, owner.id)
+    audit.record(db, owner.household_id, owner.id, "invite.created")
     return InviteCreateOut(id=invite.id, token=raw, expires_at=invite.expires_at)
 
 
@@ -191,6 +196,7 @@ def revoke_invite_route(
 ) -> dict[str, str]:
     if not invites.revoke_invite(db, owner.household_id, invite_id):
         raise HTTPException(status_code=404, detail="Invite not found")
+    audit.record(db, owner.household_id, owner.id, "invite.revoked", {"invite_id": str(invite_id)})
     return {"status": "ok"}
 
 
@@ -206,4 +212,5 @@ def join(
     except auth.EmailTaken:
         raise HTTPException(status_code=409, detail="Email already registered")
     _set_cookie(response, auth.issue_session(db, user))
+    audit.record(db, user.household_id, user.id, "invite.accepted")
     return _out(user)

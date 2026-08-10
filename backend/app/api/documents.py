@@ -4,11 +4,12 @@ from fastapi import APIRouter, Depends, Form, HTTPException, UploadFile
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
-from app.api.deps import require_household, require_owner
+from app.api.deps import current_user, require_household, require_owner
 from app.core.db import get_db
 from app.models.document import Document, DocumentKind
+from app.models.user import User
 from app.schemas.document import DocumentOut
-from app.services import documents
+from app.services import audit, documents
 
 router = APIRouter(prefix="/documents", tags=["documents"], dependencies=[Depends(require_owner)])
 
@@ -43,15 +44,16 @@ async def upload_document(
 
 @router.get("/{document_id}/download")
 def download_document(
-    document_id: uuid.UUID, hid: uuid.UUID = Depends(require_household), db: Session = Depends(get_db)
+    document_id: uuid.UUID, user: User = Depends(current_user), db: Session = Depends(get_db)
 ) -> Response:
-    doc = documents.get(db, hid, document_id)
+    doc = documents.get(db, user.household_id, document_id)
     if doc is None:
         raise HTTPException(status_code=404, detail="Document not found")
     try:
-        data = documents.read_plaintext(db, hid, document_id)
+        data = documents.read_plaintext(db, user.household_id, document_id)
     except documents.DocumentNotFound:
         raise HTTPException(status_code=404, detail="Document not found")
+    audit.record(db, user.household_id, user.id, "vault.document_downloaded", {"document_id": str(document_id)})
     return Response(
         content=data, media_type=doc.content_type,
         headers={"Content-Disposition": f'attachment; filename="{doc.filename}"'},
@@ -60,8 +62,9 @@ def download_document(
 
 @router.delete("/{document_id}")
 def delete_document(
-    document_id: uuid.UUID, hid: uuid.UUID = Depends(require_household), db: Session = Depends(get_db)
+    document_id: uuid.UUID, user: User = Depends(current_user), db: Session = Depends(get_db)
 ) -> dict[str, str]:
-    if not documents.delete(db, hid, document_id):
+    if not documents.delete(db, user.household_id, document_id):
         raise HTTPException(status_code=404, detail="Document not found")
+    audit.record(db, user.household_id, user.id, "vault.document_deleted", {"document_id": str(document_id)})
     return {"status": "ok"}

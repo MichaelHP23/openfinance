@@ -4,13 +4,14 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.api.deps import require_household, require_owner
+from app.api.deps import current_user, require_household, require_owner
 from app.core.db import get_db
 from app.models.connection import ProviderConnection
+from app.models.user import User
 from app.providers.base import get_credentials
 from app.providers.simplefin import SimpleFinError
 from app.schemas.connection import ConnectionOut, SimpleFinLink, SyncOut
-from app.services import connections
+from app.services import audit, connections
 
 log = logging.getLogger("openfinance.connections")
 
@@ -44,16 +45,17 @@ def list_connections(
 @router.post("/simplefin", response_model=SyncOut)
 def link_simplefin(
     body: SimpleFinLink,
-    hid: uuid.UUID = Depends(require_household),
+    user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> SyncOut:
     """Claim a setup token and immediately pull everything it exposes."""
     try:
-        conn = connections.link_simplefin(db, hid, body.setup_token)
-        result = connections.sync(db, hid, conn)
+        conn = connections.link_simplefin(db, user.household_id, body.setup_token)
+        result = connections.sync(db, user.household_id, conn)
     except SimpleFinError as exc:
         log.warning("simplefin link failed: %s", exc)
         raise HTTPException(status_code=400, detail=str(exc))
+    audit.record(db, user.household_id, user.id, "connection.created", {"provider": conn.provider.value})
     return SyncOut(**result.__dict__, is_demo=_is_demo(conn))
 
 
@@ -78,9 +80,10 @@ def sync_connection(
 @router.delete("/{connection_id}")
 def delete_connection(
     connection_id: uuid.UUID,
-    hid: uuid.UUID = Depends(require_household),
+    user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> dict[str, str]:
-    if not connections.delete(db, hid, connection_id):
+    if not connections.delete(db, user.household_id, connection_id):
         raise HTTPException(status_code=404, detail="Connection not found")
+    audit.record(db, user.household_id, user.id, "connection.deleted", {"connection_id": str(connection_id)})
     return {"status": "ok"}

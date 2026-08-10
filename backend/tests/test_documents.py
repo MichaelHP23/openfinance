@@ -5,12 +5,14 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from app.api.deps import require_household, require_owner
+from app.api.deps import current_user, require_household, require_owner
 from app.core.config import settings
 from app.core.db import get_db
+from app.core.security import hash_password
 from app.main import app
 from app.models.document import Document, DocumentKind
 from app.models.household import Household
+from app.models.user import Role, User
 from app.services import documents
 from tests.csrf_helper import csrf_client
 
@@ -23,6 +25,15 @@ def household(db):
     db.add(row)
     db.commit()
     return row
+
+
+@pytest.fixture
+def user(db, household):
+    u = User(household_id=household.id, email="vaultowner@example.com", password_hash=hash_password("x"), role=Role.owner)
+    db.add(u)
+    db.commit()
+    db.refresh(u)
+    return u
 
 
 def test_document_round_trips_every_column(db, household):
@@ -69,6 +80,18 @@ def other_household(db):
     db.add(row)
     db.commit()
     return row
+
+
+@pytest.fixture
+def other_user(db, other_household):
+    u = User(
+        household_id=other_household.id, email="othervaultowner@example.com",
+        password_hash=hash_password("x"), role=Role.owner,
+    )
+    db.add(u)
+    db.commit()
+    db.refresh(u)
+    return u
 
 
 @pytest.fixture(autouse=True)
@@ -144,13 +167,15 @@ def test_delete_of_unknown_document_returns_false(db, household):
 
 
 @pytest.fixture
-def client(db, household):
+def client(db, household, user):
     app.dependency_overrides[require_household] = lambda: household.id
     app.dependency_overrides[require_owner] = lambda: None
+    app.dependency_overrides[current_user] = lambda: user
     yield csrf_client(app, db, get_db)
     app.dependency_overrides.pop(get_db, None)
     app.dependency_overrides.pop(require_household, None)
     app.dependency_overrides.pop(require_owner, None)
+    app.dependency_overrides.pop(current_user, None)
 
 
 def _upload(client, content=b"the whole document, byte for byte"):
@@ -190,13 +215,17 @@ def test_delete_then_download_404s(client):
     assert client.get(f"/documents/{uploaded['id']}/download").status_code == 404
 
 
-def test_a_document_from_another_household_is_not_downloadable(db, household, other_household):
+def test_a_document_from_another_household_is_not_downloadable(
+    db, household, other_household, user, other_user
+):
     app.dependency_overrides[require_household] = lambda: household.id
     app.dependency_overrides[require_owner] = lambda: None
+    app.dependency_overrides[current_user] = lambda: user
     mine = csrf_client(app, db, get_db)
     uploaded = _upload(mine).json()
 
     app.dependency_overrides[require_household] = lambda: other_household.id
+    app.dependency_overrides[current_user] = lambda: other_user
     theirs = TestClient(app)
     res = theirs.get(f"/documents/{uploaded['id']}/download")
     assert res.status_code == 404
@@ -204,6 +233,7 @@ def test_a_document_from_another_household_is_not_downloadable(db, household, ot
     app.dependency_overrides.pop(get_db, None)
     app.dependency_overrides.pop(require_household, None)
     app.dependency_overrides.pop(require_owner, None)
+    app.dependency_overrides.pop(current_user, None)
 
 
 def test_unknown_document_download_is_404(client):
