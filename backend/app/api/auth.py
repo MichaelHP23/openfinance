@@ -7,8 +7,17 @@ from app.api.deps import current_user, limiter
 from app.core.config import settings
 from app.core.db import get_db
 from app.models.user import User
-from app.schemas.auth import Credentials, PasswordChange, SessionOut, UserOut
-from app.services import auth
+from app.schemas.auth import (
+    Credentials,
+    LoginResult,
+    PasswordChange,
+    PreauthCode,
+    SessionOut,
+    TwoFACode,
+    TwoFAEnrollOut,
+    UserOut,
+)
+from app.services import auth, twofa
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 COOKIE = "session"
@@ -48,16 +57,18 @@ def register(
     return _out(user)
 
 
-@router.post("/login", response_model=UserOut)
+@router.post("/login", response_model=LoginResult)
 @limiter.limit("30/minute")
 def login(
     body: Credentials, request: Request, response: Response, db: Session = Depends(get_db)
-) -> UserOut:
+) -> LoginResult:
     user = auth.authenticate(db, body.email, body.password)
     if not user:
         raise HTTPException(status_code=401, detail="Invalid credentials")
+    if user.totp_enabled:
+        return LoginResult(status="totp_required", preauth_token=twofa.issue_preauth(user))
     _set_cookie(response, auth.issue_session(db, user))
-    return _out(user)
+    return LoginResult(status="ok", user=_out(user))
 
 
 @router.post("/logout")
@@ -119,3 +130,34 @@ def revoke_other_sessions(
 ) -> dict[str, int]:
     current_hash = auth.hash_token(session) if session else ""
     return {"revoked": auth.revoke_other_sessions(db, user.id, current_hash)}
+
+
+@router.post("/2fa/enroll", response_model=TwoFAEnrollOut)
+def enroll_2fa(user: User = Depends(current_user), db: Session = Depends(get_db)) -> TwoFAEnrollOut:
+    secret, uri = twofa.start_enrollment(db, user)
+    return TwoFAEnrollOut(secret=secret, provisioning_uri=uri)
+
+
+@router.post("/2fa/verify")
+@limiter.limit("10/minute")
+def verify_2fa(
+    body: TwoFACode, request: Request, user: User = Depends(current_user), db: Session = Depends(get_db)
+) -> dict[str, str]:
+    if not twofa.confirm_enrollment(db, user, body.code):
+        raise HTTPException(status_code=400, detail="Invalid code")
+    return {"status": "ok"}
+
+
+@router.post("/2fa/login-verify", response_model=UserOut)
+@limiter.limit("10/minute")
+def login_verify_2fa(
+    body: PreauthCode, request: Request, response: Response, db: Session = Depends(get_db)
+) -> UserOut:
+    try:
+        user = twofa.resolve_preauth(db, body.preauth_token)
+    except twofa.InvalidPreauth:
+        raise HTTPException(status_code=401, detail="Invalid or expired login")
+    if not twofa.verify_login_code(db, user, body.code):
+        raise HTTPException(status_code=401, detail="Invalid code")
+    _set_cookie(response, auth.issue_session(db, user))
+    return _out(user)
