@@ -23,7 +23,7 @@ test("mobile navigation and layout", async ({ page }) => {
   // Navigate using only what a phone user can see.
   await page.getByRole("link", { name: "Accounts" }).click();
   await page.waitForTimeout(900);
-  await expect(page.getByRole("heading", { name: "Accounts" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Accounts", exact: true })).toBeVisible();
   await checkWidth("accounts");
 
   // Investments moved off the fixed tab bar in P2's nav restructure — it now lives
