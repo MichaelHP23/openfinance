@@ -15,6 +15,7 @@ import { ReportsPage } from "./pages/ReportsPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { JoinPage } from "./pages/JoinPage";
 import { Shell } from "./ui/Shell";
+import { InstallBanner } from "./ui/InstallBanner";
 
 const qc = new QueryClient();
 
@@ -130,6 +131,7 @@ export default function App() {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>
+      <InstallBanner />
     </QueryClientProvider>
   );
 }
