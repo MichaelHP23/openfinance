@@ -22,7 +22,7 @@ matters more than what was kept.
 | P4 | AI advisor v2 — read-only tool calling, visible call trace | `docs/superpowers/plans/2026-08-01-p4-ai-advisor-v2.md` | **Shipped, merged to `main`** 2026-08-09 (was on branch `p4-ai-advisor-v2`). |
 | P5 | Reports, FIFO realized gains, encrypted document vault, full export | `docs/superpowers/plans/2026-08-01-p5-reports-tax-vault.md` | **Shipped, merged to `main`** 2026-08-09 (was on branch `p5-reports-tax-vault`). |
 | P6 | Auth hardening — CSRF, session rotation/revoke, TOTP 2FA, RBAC enforcement, audit log | `docs/superpowers/plans/2026-08-09-p6-auth-hardening.md` | **Shipped on `worktree-p6-auth-hardening`, not yet merged to `main`.** |
-| P7 | Mobile/PWA — installable, offline read cache, fixes the pre-existing `mobile.spec.ts` bug | not yet written | Independent, queued after P6 |
+| P7 | Mobile/PWA — installable, offline read cache, fixes the pre-existing `mobile.spec.ts` bug | `docs/superpowers/plans/2026-08-10-p7-mobile-pwa.md` | Plan written, not yet implemented. |
 | P8 | Plugin system | not yet written | Blocked on a written answer to the post-parity spec's §5.3 scope check — may be deferred indefinitely |
 
 P1–P5 were strictly sequential; that constraint doesn't apply to P6–P8, which have no
