@@ -123,18 +123,36 @@ export function TaxCard({ year }: { year: number }) {
       {gains.gains.length === 0 ? (
         <Empty>No realized sales in {year}.</Empty>
       ) : (
-        <table className="w-full">
-          <tbody>
+        <>
+          <table className="hidden w-full md:table">
+            <tbody>
+              {gains.gains.map((g, i) => (
+                <tr key={i} className="border-b border-line/60 last:border-0">
+                  <td className="py-2 text-sm">{g.symbol}</td>
+                  <td className="py-2 text-[13px] text-muted">{g.closed_on}</td>
+                  <td className="py-2 text-[13px] text-muted">{g.term}</td>
+                  <td className="tnum py-2 text-right text-sm">{usd(g.gain)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <ul className="flex flex-col gap-2 md:hidden">
             {gains.gains.map((g, i) => (
-              <tr key={i} className="border-b border-line/60 last:border-0">
-                <td className="py-2 text-sm">{g.symbol}</td>
-                <td className="py-2 text-[13px] text-muted">{g.closed_on}</td>
-                <td className="py-2 text-[13px] text-muted">{g.term}</td>
-                <td className="tnum py-2 text-right text-sm">{usd(g.gain)}</td>
-              </tr>
+              <li
+                key={i}
+                className="flex items-center justify-between gap-3 border-b border-line/60 py-2 text-[13px] last:border-0"
+              >
+                <span>
+                  <span className="text-sm">{g.symbol}</span>{" "}
+                  <span className="text-muted">
+                    · {g.closed_on} · {g.term}
+                  </span>
+                </span>
+                <span className="tnum shrink-0">{usd(g.gain)}</span>
+              </li>
             ))}
-          </tbody>
-        </table>
+          </ul>
+        </>
       )}
 
       {/* Matches the backend's WASH_SALE_DISCLAIMER (app/services/tax.py) verbatim,

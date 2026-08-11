@@ -63,15 +63,15 @@ const renderList = () => render(<TransactionList />, { wrapper });
 test("renders transactions with a short date", async () => {
   vi.mocked(apiFetch).mockImplementation(listFixtureImpl as never);
   renderList();
-  expect(await screen.findByText("Starbucks")).toBeInTheDocument();
-  expect(screen.getByText("Jan 1")).toBeInTheDocument();
+  expect((await screen.findAllByText("Starbucks")).length).toBeGreaterThan(0);
+  expect(screen.getAllByText("Jan 1")[0]).toBeInTheDocument();
 });
 
 test("signs amounts: outflow bare, inflow with a plus", async () => {
   vi.mocked(apiFetch).mockImplementation(listFixtureImpl as never);
   renderList();
-  expect(await screen.findByText("-$9.99")).toBeInTheDocument();
-  expect(screen.getByText("+$2,500.00")).toBeInTheDocument();
+  expect((await screen.findAllByText("-$9.99")).length).toBeGreaterThan(0);
+  expect(screen.getAllByText("+$2,500.00")[0]).toBeInTheDocument();
 });
 
 test("keeps the chosen category visible while its PATCH is in flight", async () => {
@@ -81,12 +81,12 @@ test("keeps the chosen category visible while its PATCH is in flight", async () 
     return [];
   });
   render(<TxnRows txns={[txn]} />, { wrapper });
-  const select = (await screen.findByLabelText(
+  const selects = (await screen.findAllByLabelText(
     "Category for Whole Foods",
-  )) as HTMLSelectElement;
-  await screen.findByRole("option", { name: "B" });
-  fireEvent.change(select, { target: { value: "c2" } });
-  await waitFor(() => expect(select.value).toBe("c2"));
+  )) as HTMLSelectElement[];
+  await screen.findAllByRole("option", { name: "B" });
+  for (const select of selects) fireEvent.change(select, { target: { value: "c2" } });
+  await waitFor(() => selects.forEach((s) => expect(s.value).toBe("c2")));
 });
 
 test("keeps the chosen category visible after the PATCH succeeds but before the refetch lands", async () => {
@@ -97,18 +97,18 @@ test("keeps the chosen category visible after the PATCH succeeds but before the 
     return [];
   });
   render(<TxnRows txns={[txn]} />, { wrapper });
-  const select = (await screen.findByLabelText(
+  const selects = (await screen.findAllByLabelText(
     "Category for Whole Foods",
-  )) as HTMLSelectElement;
-  await screen.findByRole("option", { name: "B" });
-  fireEvent.change(select, { target: { value: "c2" } });
+  )) as HTMLSelectElement[];
+  await screen.findAllByRole("option", { name: "B" });
+  for (const select of selects) fireEvent.change(select, { target: { value: "c2" } });
   // The rule prompt only renders from the mutation's onSuccess, so waiting for it
   // proves onSuccess has already run — this is the moment a naive implementation
   // that clears its optimistic state in onSuccess would snap back to the stale
   // txn.category_id prop, since the invalidated ["transactions"] refetch (which
   // would supply a fresh prop) never resolves in this test.
-  await screen.findByText("Make it a rule");
-  expect(select.value).toBe("c2");
+  await screen.findAllByText("Make it a rule");
+  selects.forEach((s) => expect(s.value).toBe("c2"));
 });
 
 test("shows the PATCH error message when setting a category fails", async () => {
@@ -118,10 +118,10 @@ test("shows the PATCH error message when setting a category fails", async () => 
     return [];
   });
   render(<TxnRows txns={[txn]} />, { wrapper });
-  const select = await screen.findByLabelText("Category for Whole Foods");
-  await screen.findByRole("option", { name: "B" });
-  fireEvent.change(select, { target: { value: "c2" } });
-  expect(await screen.findByText("Category not found")).toBeInTheDocument();
+  const selects = await screen.findAllByLabelText("Category for Whole Foods");
+  await screen.findAllByRole("option", { name: "B" });
+  for (const select of selects) fireEvent.change(select, { target: { value: "c2" } });
+  expect((await screen.findAllByText("Category not found")).length).toBeGreaterThan(0);
 });
 
 test("keeps the rule prompt open and shows the error when 'Make it a rule' fails", async () => {
@@ -132,11 +132,11 @@ test("keeps the rule prompt open and shows the error when 'Make it a rule' fails
     return [];
   });
   render(<TxnRows txns={[txn]} />, { wrapper });
-  const select = await screen.findByLabelText("Category for Whole Foods");
-  await screen.findByRole("option", { name: "B" });
-  fireEvent.change(select, { target: { value: "c2" } });
-  const makeRuleBtn = await screen.findByText("Make it a rule");
-  fireEvent.click(makeRuleBtn);
-  expect(await screen.findByText("Category not found")).toBeInTheDocument();
-  expect(screen.getByText("Make it a rule")).toBeInTheDocument();
+  const selects = await screen.findAllByLabelText("Category for Whole Foods");
+  await screen.findAllByRole("option", { name: "B" });
+  for (const select of selects) fireEvent.change(select, { target: { value: "c2" } });
+  const makeRuleBtns = await screen.findAllByText("Make it a rule");
+  makeRuleBtns.forEach((btn) => fireEvent.click(btn));
+  expect((await screen.findAllByText("Category not found")).length).toBeGreaterThan(0);
+  expect(screen.getAllByText("Make it a rule")[0]).toBeInTheDocument();
 });

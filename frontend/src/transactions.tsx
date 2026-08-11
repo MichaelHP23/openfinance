@@ -10,17 +10,25 @@ import { Empty } from "./ui/Shell";
 
 export function TxnRows({ txns }: { txns: Txn[] }) {
   return (
-    <table className="w-full">
-      <tbody>
+    <>
+      <table className="hidden w-full md:table">
+        <tbody>
+          {txns.map((t, i) => (
+            <TxnRow key={t.id} txn={t} index={i} />
+          ))}
+        </tbody>
+      </table>
+      {/* Mobile: not a table — four columns plus a select don't fit in 280px. */}
+      <ul className="flex flex-col gap-3 md:hidden">
         {txns.map((t, i) => (
-          <TxnRow key={t.id} txn={t} index={i} />
+          <TxnCard key={t.id} txn={t} index={i} />
         ))}
-      </tbody>
-    </table>
+      </ul>
+    </>
   );
 }
 
-function TxnRow({ txn, index }: { txn: Txn; index: number }) {
+function useCategoryMutation(txn: Txn) {
   const qc = useQueryClient();
   const createRule = useCreateRule();
   const [askAbout, setAskAbout] = useState<string | null>(null);
@@ -52,6 +60,13 @@ function TxnRow({ txn, index }: { txn: Txn; index: number }) {
     onError: () => setPendingCategory(undefined),
   });
 
+  return { createRule, askAbout, setAskAbout, pendingCategory, setPendingCategory, setCategory };
+}
+
+function TxnRow({ txn, index }: { txn: Txn; index: number }) {
+  const { createRule, askAbout, setAskAbout, pendingCategory, setPendingCategory, setCategory } =
+    useCategoryMutation(txn);
+
   return (
     <>
       <tr
@@ -70,9 +85,7 @@ function TxnRow({ txn, index }: { txn: Txn; index: number }) {
             ariaLabel={`Category for ${txn.merchant_raw}`}
           />
           {setCategory.isError && (
-            <p className="mt-1 text-[13px] text-clay">
-              {(setCategory.error as Error).message}
-            </p>
+            <p className="mt-1 text-[13px] text-clay">{(setCategory.error as Error).message}</p>
           )}
         </td>
         <td
@@ -86,27 +99,92 @@ function TxnRow({ txn, index }: { txn: Txn; index: number }) {
       {askAbout && (
         <tr>
           <td colSpan={4} className="pb-3 text-[13px] text-muted">
-            Always categorize “{txn.merchant_raw}” this way?{" "}
-            <button
-              className="text-acid"
-              onClick={() => {
-                createRule.mutate(
-                  { pattern: txn.merchant_raw, category_id: askAbout },
-                  { onSuccess: () => setAskAbout(null) },
-                );
-              }}
-            >
-              Make it a rule
-            </button>{" "}
-            <button className="ml-2" onClick={() => setAskAbout(null)}>
-              No
-            </button>
-            {createRule.isError && (
-              <p className="mt-1 text-clay">{(createRule.error as Error).message}</p>
-            )}
+            <RuleOffer
+              merchant={txn.merchant_raw}
+              categoryId={askAbout}
+              createRule={createRule}
+              onDone={() => setAskAbout(null)}
+            />
           </td>
         </tr>
       )}
+    </>
+  );
+}
+
+function TxnCard({ txn, index }: { txn: Txn; index: number }) {
+  const { createRule, askAbout, setAskAbout, pendingCategory, setPendingCategory, setCategory } =
+    useCategoryMutation(txn);
+
+  return (
+    <li
+      className="rise card p-3"
+      style={{ "--d": `${Math.min(index, 12) * 30}ms` } as React.CSSProperties}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="truncate text-sm">{txn.merchant_raw}</p>
+          <p className="tnum text-[12px] text-muted">{shortDate(txn.posted_at)}</p>
+        </div>
+        <span
+          className={`tnum shrink-0 text-sm ${Number(txn.amount) > 0 ? "text-acid" : "text-bone"}`}
+        >
+          {Number(txn.amount) > 0 ? `+${usd(txn.amount)}` : usd(txn.amount)}
+        </span>
+      </div>
+      <div className="mt-2">
+        <CategoryPicker
+          value={pendingCategory !== undefined ? pendingCategory : txn.category_id}
+          onChange={(id) => {
+            setPendingCategory(id);
+            setCategory.mutate(id);
+          }}
+          ariaLabel={`Category for ${txn.merchant_raw}`}
+        />
+        {setCategory.isError && (
+          <p className="mt-1 text-[13px] text-clay">{(setCategory.error as Error).message}</p>
+        )}
+      </div>
+      {askAbout && (
+        <div className="mt-2 text-[13px] text-muted">
+          <RuleOffer
+            merchant={txn.merchant_raw}
+            categoryId={askAbout}
+            createRule={createRule}
+            onDone={() => setAskAbout(null)}
+          />
+        </div>
+      )}
+    </li>
+  );
+}
+
+function RuleOffer({
+  merchant,
+  categoryId,
+  createRule,
+  onDone,
+}: {
+  merchant: string;
+  categoryId: string;
+  createRule: ReturnType<typeof useCreateRule>;
+  onDone: () => void;
+}) {
+  return (
+    <>
+      Always categorize “{merchant}” this way?{" "}
+      <button
+        className="text-acid"
+        onClick={() =>
+          createRule.mutate({ pattern: merchant, category_id: categoryId }, { onSuccess: onDone })
+        }
+      >
+        Make it a rule
+      </button>{" "}
+      <button className="ml-2" onClick={onDone}>
+        No
+      </button>
+      {createRule.isError && <p className="mt-1 text-clay">{(createRule.error as Error).message}</p>}
     </>
   );
 }

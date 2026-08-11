@@ -34,9 +34,9 @@ describe("BudgetBoard", () => {
   it("shows the category name, actual, and remaining", async () => {
     vi.mocked(apiFetch).mockResolvedValue([row()]);
     show();
-    expect(await screen.findByText("Groceries")).toBeInTheDocument();
-    expect(screen.getByText("$40.00")).toBeInTheDocument();
-    expect(screen.getByText("$60.00")).toBeInTheDocument();
+    expect((await screen.findAllByText("Groceries")).length).toBeGreaterThan(0);
+    expect(screen.getAllByText("$40.00").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("$60.00").length).toBeGreaterThan(0);
   });
 
   it("filling in an amount and saving PUTs the new budget", async () => {
@@ -45,9 +45,9 @@ describe("BudgetBoard", () => {
       return [row()];
     });
     show();
-    const input = await screen.findByLabelText("Budget for Groceries");
+    const [input] = await screen.findAllByLabelText("Budget for Groceries");
     fireEvent.change(input, { target: { value: "150" } });
-    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    fireEvent.click(screen.getAllByRole("button", { name: "Save changes" })[0]);
     await waitFor(() =>
       expect(apiFetch).toHaveBeenCalledWith(
         "/budgets/2026-07",
@@ -59,7 +59,7 @@ describe("BudgetBoard", () => {
   it("has no save button when nothing has been edited", async () => {
     vi.mocked(apiFetch).mockResolvedValue([row()]);
     show();
-    await screen.findByText("Groceries");
+    await screen.findAllByText("Groceries");
     expect(screen.queryByRole("button", { name: "Save changes" })).not.toBeInTheDocument();
   });
 
@@ -68,22 +68,22 @@ describe("BudgetBoard", () => {
       row({ carry_in: "40.0000", effective_budget: "140.0000", rollover: true }),
     ]);
     show();
-    expect(await screen.findByText("+$40.00 carried in")).toBeInTheDocument();
+    expect((await screen.findAllByText("+$40.00 carried in")).length).toBeGreaterThan(0);
   });
 
   it("does not show a carry-in indicator when carry_in is zero", async () => {
     vi.mocked(apiFetch).mockResolvedValue([row({ carry_in: "0.0000" })]);
     show();
-    await screen.findByText("Groceries");
+    await screen.findAllByText("Groceries");
     expect(screen.queryByText(/carried in/)).not.toBeInTheDocument();
   });
 
   it("disables save when the only edit is a blanked-out input", async () => {
     vi.mocked(apiFetch).mockResolvedValue([row()]);
     show();
-    const input = await screen.findByLabelText("Budget for Groceries");
+    const [input] = await screen.findAllByLabelText("Budget for Groceries");
     fireEvent.change(input, { target: { value: "" } });
-    const saveButton = await screen.findByRole("button", { name: "Save changes" });
+    const [saveButton] = await screen.findAllByRole("button", { name: "Save changes" });
     expect(saveButton).toBeDisabled();
     fireEvent.click(saveButton);
     // A disabled button doesn't fire onClick, so no PUT should ever go out.
