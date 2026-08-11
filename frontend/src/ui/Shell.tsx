@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { NavLink } from "react-router-dom";
 import { apiFetch } from "../api/client";
 import { MoreMenu } from "./MoreMenu";
+import { OfflineBanner } from "./OfflineBanner";
 
 // Three fixed mobile tabs, down from five — see PLAN-CONSTRAINTS.md's Navigation
 // section. A fourth slot is the MoreMenu trigger rendered below, not a fourth entry
@@ -91,7 +92,10 @@ export function Shell({ children, localMode }: { children: ReactNode; localMode:
         </header>
 
         <main className="min-w-0 flex-1 px-5 py-6 pb-28 md:px-10 md:py-12 md:pb-12">
-          <div className="mx-auto w-full max-w-5xl">{children}</div>
+          <div className="mx-auto w-full max-w-5xl">
+            <OfflineBanner />
+            {children}
+          </div>
         </main>
       </div>
 
