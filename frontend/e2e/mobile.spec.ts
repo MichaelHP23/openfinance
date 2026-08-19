@@ -43,3 +43,33 @@ test("mobile navigation and layout", async ({ page }) => {
   // A phone screen that scrolls sideways is the single most common mobile regression here.
   expect(overflow, overflow.join("; ")).toEqual([]);
 });
+
+test.describe("360px width audit", () => {
+  test.use({ viewport: { width: 360, height: 800 }, isMobile: true, hasTouch: true });
+
+  const noHorizontalScroll = async (page: import("@playwright/test").Page) => {
+    const overflow = await page.evaluate(() => {
+      const docWidth = document.documentElement.clientWidth;
+      return document.scrollingElement!.scrollWidth > docWidth + 1;
+    });
+    expect(overflow).toBe(false);
+  };
+
+  const pages: [string, string][] = [
+    ["/", "Overview"],
+    ["/accounts", "Accounts"],
+    ["/transactions", "Transactions"],
+    ["/budgets", "Budgets"],
+    ["/goals", "Goals"],
+    ["/reports", "Reports"],
+  ];
+
+  for (const [path, heading] of pages) {
+    test(`${path || "/"} has no horizontal scroll at 360px`, async ({ page }) => {
+      await page.goto(path);
+      await expect(page.getByRole("heading", { name: heading, exact: true })).toBeVisible();
+      await page.waitForTimeout(600); // let async data settle before measuring layout
+      await noHorizontalScroll(page);
+    });
+  }
+});
