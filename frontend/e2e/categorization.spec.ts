@@ -36,7 +36,10 @@ test("a rule categorizes an imported transaction", async ({ page }) => {
   await expect(page.getByText(/Imported 1, skipped 0/)).toBeVisible();
 
   // It arrives categorized — no manual step in between.
-  await expect(page.getByLabel(`Category for ${merchant}`)).toHaveValue(/.+/);
+  // TxnRows dual-renders a desktop <table> and a mobile <ul> (Task 5) — both are in the DOM
+  // at once, only one CSS-hidden per viewport. At Playwright's default desktop viewport the
+  // table is the visible copy, and it's first in DOM order.
+  await expect(page.getByLabel(`Category for ${merchant}`).first()).toHaveValue(/.+/);
 
   // Clean up after ourselves — this runs against the real local database.
   await page.getByRole("button", { name: `Delete ${pattern}` }).click();

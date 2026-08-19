@@ -3,12 +3,15 @@ import { expect, test } from "@playwright/test";
 // Runs against `docker compose up`, which sets LOCAL_MODE=true — no login involved.
 test("setting a budget persists across a reload", async ({ page }) => {
   await page.goto("/budgets");
-  await page.getByLabel("Budget for Groceries").fill("325");
+  // BudgetBoard dual-renders a desktop <table> and a mobile <ul> (Task 5) — both are in the
+  // DOM at once, only one CSS-hidden per viewport. At Playwright's default desktop viewport
+  // the table is the visible copy, and it's first in DOM order.
+  await page.getByLabel("Budget for Groceries").first().fill("325");
   await page.getByRole("button", { name: "Save changes" }).click();
   await expect(page.getByRole("button", { name: "Save changes" })).toHaveCount(0);
 
   await page.reload();
-  await expect(page.getByLabel("Budget for Groceries")).toHaveValue("325.0000");
+  await expect(page.getByLabel("Budget for Groceries").first()).toHaveValue("325.0000");
 });
 
 test("Budgets is reachable from the mobile More menu", async ({ page }) => {

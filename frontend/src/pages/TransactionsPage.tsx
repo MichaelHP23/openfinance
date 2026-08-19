@@ -26,12 +26,13 @@ export function TransactionsPage() {
         <Card delay={60}>
           <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
             <h2 className="text-sm font-medium">Add to</h2>
-            <label className="flex items-center gap-2">
+            <label className="flex min-w-0 items-center gap-2">
               <span className="label">Account</span>
               <select
                 aria-label="Account"
                 value={accountId}
                 onChange={(e) => setSelected(e.target.value)}
+                className="min-w-0"
               >
                 {accounts.map((a) => (
                   <option key={a.id} value={a.id}>
