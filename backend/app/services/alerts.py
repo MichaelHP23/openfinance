@@ -17,8 +17,10 @@ from decimal import Decimal
 from typing import Literal
 
 from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
+from app.models.alert_dismissal import AlertDismissal
 from app.models.recurring import Cadence, RecurringSeries, SeriesStatus
 from app.models.transaction import Transaction
 from app.services import budgets, forecast, recurring
@@ -28,7 +30,7 @@ YEARLY_RENEWAL_DAYS = 30
 LOW_BALANCE_DAYS = 14
 LARGE_CHARGE_LOOKBACK_DAYS = 7
 LARGE_CHARGE_MULTIPLE = 3
-LARGE_CHARGE_UNKNOWN_MERCHANT = Decimal("500")
+LARGE_CHARGE_UNKNOWN_MERCHANT = Decimal(500)
 
 Severity = Literal["info", "warn", "urgent"]
 _SEVERITY_RANK: dict[str, int] = {"urgent": 0, "warn": 1, "info": 2}
@@ -221,6 +223,17 @@ def _large_charges(
     return out
 
 
+def dismiss(db: Session, household_id: uuid.UUID, key: str) -> None:
+    """Idempotent, and deliberately does not check that `key` names a live alert: the
+    alert may have resolved between the page load and the click."""
+    db.execute(
+        insert(AlertDismissal)
+        .values(household_id=household_id, key=key)
+        .on_conflict_do_nothing(constraint="uq_alert_dismissal")
+    )
+    db.commit()
+
+
 def list_for(db: Session, household_id: uuid.UUID, *, today: date | None = None) -> list[Alert]:
     today = today or datetime.now(UTC).date()
     series = recurring.list_for(db, household_id, status=None)
@@ -230,6 +243,10 @@ def list_for(db: Session, household_id: uuid.UUID, *, today: date | None = None)
         *_over_budget(db, household_id, today),
         *_large_charges(db, household_id, series, today),
     ]
+    dismissed = set(
+        db.scalars(select(AlertDismissal.key).where(AlertDismissal.household_id == household_id))
+    )
+    found = [a for a in found if a.key not in dismissed]
     # Two stable sorts: newest first, then by severity on top of that order.
     found.sort(key=lambda a: a.occurred_on, reverse=True)
     found.sort(key=lambda a: _SEVERITY_RANK[a.severity])

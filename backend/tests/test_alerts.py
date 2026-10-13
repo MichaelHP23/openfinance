@@ -252,3 +252,31 @@ def test_large_charge_ignores_deposits_and_charges_older_than_a_week(db, househo
     _txn(db, household, account, merchant="Employer", amount="3000.00", on=date(2026, 10, 10))
     _txn(db, household, account, merchant="Sofa Barn", amount="-900.00", on=date(2026, 10, 4))
     assert AlertKind.large_charge not in _kinds(alerts.list_for(db, household.id, today=TODAY))
+
+
+def test_dismissed_alert_is_hidden_and_dismissing_twice_is_fine(db, household, account):
+    _series(db, household, account, next_expected_on=TODAY + timedelta(days=1))
+    key = alerts.list_for(db, household.id, today=TODAY)[0].key
+    alerts.dismiss(db, household.id, key)
+    alerts.dismiss(db, household.id, key)
+    assert alerts.list_for(db, household.id, today=TODAY) == []
+
+
+def test_dismissal_does_not_hide_the_next_occurrence(db, household, account):
+    s = _series(db, household, account, next_expected_on=TODAY + timedelta(days=1))
+    alerts.dismiss(db, household.id, alerts.list_for(db, household.id, today=TODAY)[0].key)
+    s.next_expected_on = date(2026, 11, 13)
+    db.commit()
+    assert _kinds(alerts.list_for(db, household.id, today=date(2026, 11, 12))) == [AlertKind.bill_due]
+
+
+def test_households_do_not_see_or_dismiss_each_others_alerts(db, household, account):
+    other = Household(name="Other")
+    db.add(other)
+    db.commit()
+    _series(db, household, account, next_expected_on=TODAY + timedelta(days=1))
+    key = alerts.list_for(db, household.id, today=TODAY)[0].key
+
+    assert alerts.list_for(db, other.id, today=TODAY) == []
+    alerts.dismiss(db, other.id, key)
+    assert [a.key for a in alerts.list_for(db, household.id, today=TODAY)] == [key]
