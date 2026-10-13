@@ -9,10 +9,12 @@ from app.models.alert_dismissal import AlertDismissal
 from app.models.household import Household
 from app.models.recurring import Cadence, RecurringSeries, SeriesStatus
 from app.models.transaction import Transaction
-from app.services import alerts
+from app.services import alerts, budgets
 from app.services.alerts import AlertKind
+from app.services.categories import ensure_system_categories, system_category_id
 
 TODAY = date(2026, 10, 12)
+GROCERIES = system_category_id("Food & Drink/Groceries")
 
 
 @pytest.fixture
@@ -165,3 +167,88 @@ def test_alerts_sort_urgent_first_then_newest(db, household, account):
     assert _kinds(alerts.list_for(db, household.id, today=TODAY)) == [
         AlertKind.still_billing, AlertKind.price_increase, AlertKind.bill_due,
     ]
+
+
+def test_low_balance_fires_when_a_bill_takes_cash_below_zero(db, household):
+    acct = Account(
+        household_id=household.id, type=AccountType.checking, name="Thin",
+        currency="USD", balance=Decimal("100.00"),
+    )
+    db.add(acct)
+    db.commit()
+    _series(
+        db, household, acct, label="Rent", typical_amount=Decimal("900.00"),
+        next_expected_on=TODAY + timedelta(days=10),
+    )
+    found = [a for a in alerts.list_for(db, household.id, today=TODAY) if a.kind == AlertKind.low_balance]
+    assert len(found) == 1
+    assert found[0].key == "low_balance:cash:2026-10-22"
+    assert found[0].severity == "urgent"
+
+
+def test_low_balance_fires_today_when_cash_is_already_negative(db, household):
+    db.add(
+        Account(
+            household_id=household.id, type=AccountType.checking, name="Overdrawn",
+            currency="USD", balance=Decimal("-50.00"),
+        )
+    )
+    db.commit()
+    found = alerts.list_for(db, household.id, today=TODAY)
+    assert [a.key for a in found] == ["low_balance:cash:2026-10-12"]
+
+
+def test_low_balance_is_quiet_when_the_dip_is_past_fourteen_days(db, household):
+    acct = Account(
+        household_id=household.id, type=AccountType.checking, name="Thin",
+        currency="USD", balance=Decimal("100.00"),
+    )
+    db.add(acct)
+    db.commit()
+    _series(
+        db, household, acct, label="Rent", typical_amount=Decimal("900.00"),
+        next_expected_on=TODAY + timedelta(days=15),
+    )
+    assert alerts.list_for(db, household.id, today=TODAY) == []
+
+
+def test_over_budget_fires_when_spend_exceeds_the_budget(db, household, account):
+    ensure_system_categories(db)
+    budgets.upsert(
+        db, household.id, date(2026, 10, 1),
+        [budgets.BudgetItem(category_id=GROCERIES, amount=Decimal("300.00"))],
+    )
+    _txn(db, household, account, merchant="Corner Market", amount="-340.00",
+         on=date(2026, 10, 3), category_id=GROCERIES)
+    found = [a for a in alerts.list_for(db, household.id, today=TODAY) if a.kind == AlertKind.over_budget]
+    assert len(found) == 1
+    assert found[0].key == f"over_budget:{GROCERIES}:2026-10-01"
+    assert "$40.00" in found[0].body
+
+
+def test_over_budget_is_quiet_for_spend_in_an_unbudgeted_category(db, household, account):
+    ensure_system_categories(db)
+    _txn(db, household, account, merchant="Corner Market", amount="-340.00",
+         on=date(2026, 10, 3), category_id=GROCERIES)
+    assert AlertKind.over_budget not in _kinds(alerts.list_for(db, household.id, today=TODAY))
+
+
+def test_large_charge_fires_at_three_times_the_usual_amount(db, household, account):
+    _series(db, household, account, label="City Power", typical_amount=Decimal("80.00"))
+    t = _txn(db, household, account, merchant="City Power", amount="-240.00", on=date(2026, 10, 10))
+    found = [a for a in alerts.list_for(db, household.id, today=TODAY) if a.kind == AlertKind.large_charge]
+    assert [a.key for a in found] == [f"large_charge:{t.id}:2026-10-10"]
+
+
+def test_large_charge_fires_at_five_hundred_for_an_unknown_merchant(db, household, account):
+    _txn(db, household, account, merchant="Sofa Barn", amount="-500.00", on=date(2026, 10, 10))
+    _txn(db, household, account, merchant="Lamp Hut", amount="-499.99", on=date(2026, 10, 10))
+    found = [a for a in alerts.list_for(db, household.id, today=TODAY) if a.kind == AlertKind.large_charge]
+    assert len(found) == 1
+    assert "Sofa Barn" in found[0].title
+
+
+def test_large_charge_ignores_deposits_and_charges_older_than_a_week(db, household, account):
+    _txn(db, household, account, merchant="Employer", amount="3000.00", on=date(2026, 10, 10))
+    _txn(db, household, account, merchant="Sofa Barn", amount="-900.00", on=date(2026, 10, 4))
+    assert AlertKind.large_charge not in _kinds(alerts.list_for(db, household.id, today=TODAY))

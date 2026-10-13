@@ -13,15 +13,22 @@ import enum
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
+from decimal import Decimal
 from typing import Literal
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models.recurring import Cadence, RecurringSeries, SeriesStatus
-from app.services import recurring
+from app.models.transaction import Transaction
+from app.services import budgets, forecast, recurring
 
 BILL_DUE_DAYS = 3
 YEARLY_RENEWAL_DAYS = 30
+LOW_BALANCE_DAYS = 14
+LARGE_CHARGE_LOOKBACK_DAYS = 7
+LARGE_CHARGE_MULTIPLE = 3
+LARGE_CHARGE_UNKNOWN_MERCHANT = Decimal("500")
 
 Severity = Literal["info", "warn", "urgent"]
 _SEVERITY_RANK: dict[str, int] = {"urgent": 0, "warn": 1, "info": 2}
@@ -129,10 +136,100 @@ def _from_series(
     return out
 
 
+def _low_balance(db: Session, household_id: uuid.UUID, today: date) -> list[Alert]:
+    horizon = today + timedelta(days=LOW_BALANCE_DAYS)
+    for day in forecast.project(db, household_id, 1, today=today):
+        if day.on > horizon:
+            break
+        if day.projected_balance < 0:
+            when = "today" if day.on == today else f"on {day.on.isoformat()}"
+            return [
+                Alert(
+                    # "cash" stands in for a subject id: the alert is about all cash
+                    # accounts together, which is what the forecast sums.
+                    key=_key(AlertKind.low_balance, "cash", day.on),
+                    kind=AlertKind.low_balance,
+                    severity="urgent",
+                    title="Cash is projected to go negative",
+                    body=f"Your cash accounts are projected at "
+                    f"-${abs(day.projected_balance):,.2f} {when}.",
+                    href="/",
+                    occurred_on=day.on,
+                )
+            ]
+    return []
+
+
+def _over_budget(db: Session, household_id: uuid.UUID, today: date) -> list[Alert]:
+    month = today.replace(day=1)
+    return [
+        Alert(
+            key=_key(AlertKind.over_budget, row.category_id, month),
+            kind=AlertKind.over_budget,
+            severity="warn",
+            title=f"{row.category_name} is over budget",
+            body=f"${row.actual:,.2f} spent against ${row.effective_budget:,.2f} — "
+            f"${row.actual - row.effective_budget:,.2f} over.",
+            href="/budgets",
+            occurred_on=month,
+        )
+        for row in budgets.status(db, household_id, month, today=today)
+        # effective_budget > 0: spend in a category nobody budgeted is not "over".
+        if row.effective_budget > 0 and row.actual > row.effective_budget
+    ]
+
+
+def _large_charges(
+    db: Session, household_id: uuid.UUID, series: list[RecurringSeries], today: date
+) -> list[Alert]:
+    since = datetime.combine(
+        today - timedelta(days=LARGE_CHARGE_LOOKBACK_DAYS), datetime.min.time(), tzinfo=UTC
+    )
+    txns = db.scalars(
+        select(Transaction).where(
+            Transaction.household_id == household_id,
+            Transaction.posted_at >= since,
+            Transaction.amount < 0,
+        )
+    )
+    usual = {s.merchant_key: s.typical_amount for s in series if s.direction < 0}
+    out: list[Alert] = []
+    for t in txns:
+        name = t.merchant_normalized or t.merchant_raw
+        amount = abs(t.amount)
+        typical = usual.get(recurring.merchant_key(name))
+        if typical is not None:
+            if amount < typical * LARGE_CHARGE_MULTIPLE:
+                continue
+            body = f"${amount:,.2f} — usually about ${typical:,.2f}."
+        else:
+            if amount < LARGE_CHARGE_UNKNOWN_MERCHANT:
+                continue
+            body = f"${amount:,.2f} from a merchant with no regular charges."
+        on = t.posted_at.date()
+        out.append(
+            Alert(
+                key=_key(AlertKind.large_charge, t.id, on),
+                kind=AlertKind.large_charge,
+                severity="info",
+                title=f"Large charge from {name}",
+                body=body,
+                href="/transactions",
+                occurred_on=on,
+            )
+        )
+    return out
+
+
 def list_for(db: Session, household_id: uuid.UUID, *, today: date | None = None) -> list[Alert]:
     today = today or datetime.now(UTC).date()
     series = recurring.list_for(db, household_id, status=None)
-    found = _from_series(db, household_id, series, today)
+    found = [
+        *_from_series(db, household_id, series, today),
+        *_low_balance(db, household_id, today),
+        *_over_budget(db, household_id, today),
+        *_large_charges(db, household_id, series, today),
+    ]
     # Two stable sorts: newest first, then by severity on top of that order.
     found.sort(key=lambda a: a.occurred_on, reverse=True)
     found.sort(key=lambda a: _SEVERITY_RANK[a.severity])
