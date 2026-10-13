@@ -6,6 +6,7 @@ import { Assistant, NetWorthChart } from "../insights";
 import { Card, Empty, PageHead } from "../ui/Shell";
 import { ForecastChart } from "../ForecastChart";
 import { AlertsCard } from "../AlertsCard";
+import { SafeToSpendCard } from "../SafeToSpendCard";
 
 const NOW = new Date();
 const THIS_MONTH = `${NOW.getFullYear()}-${String(NOW.getMonth() + 1).padStart(2, "0")}`;
@@ -39,6 +40,8 @@ export function OverviewPage() {
       />
 
       <AlertsCard />
+      {/* An empty install has no cash to reason about; "$0 — nothing spare" would be noise. */}
+      {accounts.length > 0 && <SafeToSpendCard />}
 
       <section className="rise mb-10" style={{ "--d": "60ms" } as React.CSSProperties}>
         <p className="label">Net worth</p>

@@ -5,7 +5,13 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import require_household
 from app.core.db import get_db
-from app.schemas.forecast import AffordIn, AffordOut, ForecastDayOut, GoalAffordabilityOut
+from app.schemas.forecast import (
+    AffordIn,
+    AffordOut,
+    ForecastDayOut,
+    GoalAffordabilityOut,
+    SafeToSpendOut,
+)
 from app.services import forecast
 
 router = APIRouter(prefix="/forecast", tags=["forecast"])
@@ -51,3 +57,11 @@ def afford(
             for g in result.goal_impact
         ],
     )
+
+
+@router.get("/safe-to-spend", response_model=SafeToSpendOut)
+def get_safe_to_spend(
+    hid: uuid.UUID = Depends(require_household), db: Session = Depends(get_db)
+) -> SafeToSpendOut:
+    result = forecast.safe_to_spend(db, hid)
+    return SafeToSpendOut(amount=result.amount, until=result.until, bills_due=result.bills_due)
