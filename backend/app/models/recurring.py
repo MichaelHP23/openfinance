@@ -76,3 +76,6 @@ class RecurringSeries(Base, UUIDMixin, TimestampMixin):
     # Where the user goes to cancel. Pasted by hand — nothing knows this automatically.
     cancel_url: Mapped[str | None] = mapped_column(String, nullable=True)
     notes: Mapped[str | None] = mapped_column(String, nullable=True)
+    # The day the user says they cancelled. User-owned, like status. A charge dated
+    # after this is what the still_billing alert reports.
+    cancelled_on: Mapped[date | None] = mapped_column(Date, nullable=True)
