@@ -31,7 +31,15 @@ export type Series = {
   confidence: number;
   cancel_url: string | null;
   notes: string | null;
+  /** The day the user marked it cancelled. A charge after this means it is still billing. */
+  cancelled_on: string | null;
+  /** From the server's built-in directory; `via` names a billing platform (Apple, PayPal…). */
+  cancel_help: { url: string; via: string | null; steps: string | null } | null;
 };
+
+// ISO dates compare correctly as strings.
+const stillBilling = (s: Series) =>
+  s.status === "cancelled" && s.cancelled_on !== null && s.last_charged_on > s.cancelled_on;
 
 export type Charge = {
   id: string;
@@ -274,7 +282,12 @@ function Badges({ series: s }: { series: Series }) {
         <span className="tnum text-[11px] text-clay">↑ {usd(s.price_increase_amount)}</span>
       )}
       {s.status === "ended" && <span className="label">ended</span>}
-      {s.status === "cancelled" && <span className="label">cancelled</span>}
+      {s.status === "cancelled" &&
+        (stillBilling(s) ? (
+          <span className="text-[11px] text-clay">still billing you</span>
+        ) : (
+          <span className="label">cancelled</span>
+        ))}
       {s.status === "ignored" && <span className="label">dismissed</span>}
       {s.amount_varies && (
         <span
@@ -354,6 +367,10 @@ function Actions({ series: s }: { series: Series }) {
   const [label, setLabel] = useState(s.label);
   const [cancelUrl, setCancelUrl] = useState(s.cancel_url ?? "");
   const [cancelling, setCancelling] = useState(false);
+  // The user's own saved link wins; the directory is the fallback. https only — the
+  // server enforces it too, but this is the last line before a click.
+  const help = s.cancel_url ? null : s.cancel_help;
+  const cancelHref = [s.cancel_url, help?.url].find((u) => u?.startsWith("https://"));
 
   return (
     <div className="mt-4 border-t border-line pt-4">
@@ -400,17 +417,26 @@ function Actions({ series: s }: { series: Series }) {
             Put back in the list
           </button>
         )}
-        {s.cancel_url && (
+        {cancelHref && (
           <a
-            href={s.cancel_url}
+            href={cancelHref}
             target="_blank"
             rel="noreferrer noopener"
             className="text-acid underline underline-offset-2"
           >
-            Cancellation page
+            Cancel {s.label}
+            {help?.via ? ` with ${help.via}` : ""}
           </a>
         )}
       </div>
+
+      {help?.steps && <p className="mt-3 text-[13px] leading-relaxed text-bone">{help.steps}</p>}
+      {stillBilling(s) && (
+        <p className="mt-3 text-[13px] leading-relaxed text-clay">
+          You marked this cancelled on {shortDate(s.cancelled_on!)}, but it charged again on{" "}
+          {shortDate(s.last_charged_on)}. The cancellation may not have gone through.
+        </p>
+      )}
 
       {cancelling && (
         <div className="mt-3 flex flex-wrap items-end gap-2">

@@ -28,6 +28,8 @@ const series = (over: Partial<Series>): Series => ({
   confidence: 92,
   cancel_url: null,
   notes: null,
+  cancelled_on: null,
+  cancel_help: null,
   ...over,
 });
 
@@ -150,4 +152,80 @@ test("expanding a series shows its charges and the honest cancellation copy", as
   );
   expect(screen.getByText(/can't cancel anything for you/)).toBeInTheDocument();
   expect(screen.getByLabelText("Rename Netflix")).toBeInTheDocument();
+});
+
+// --- P11: cancel helper ---------------------------------------------------------------
+
+const open = async () =>
+  fireEvent.click(await screen.findByRole("button", { expanded: false, name: /Netflix/ }));
+
+test("offers the merchant's cancellation page from the built-in directory", async () => {
+  mockApi([
+    series({ cancel_help: { url: "https://www.netflix.com/cancelplan", via: null, steps: null } }),
+  ]);
+  show();
+  await open();
+  const link = await screen.findByRole("link", { name: "Cancel Netflix" });
+  expect(link).toHaveAttribute("href", "https://www.netflix.com/cancelplan");
+  expect(link).toHaveAttribute("target", "_blank");
+  expect(link.getAttribute("rel")).toContain("noopener");
+});
+
+test("a link the user saved wins over the directory", async () => {
+  mockApi([
+    series({
+      cancel_url: "https://example.com/my-cancel",
+      cancel_help: { url: "https://www.netflix.com/cancelplan", via: null, steps: null },
+    }),
+  ]);
+  show();
+  await open();
+  expect(await screen.findByRole("link", { name: "Cancel Netflix" })).toHaveAttribute(
+    "href",
+    "https://example.com/my-cancel",
+  );
+});
+
+test("a platform-billed subscription says where it is really cancelled", async () => {
+  mockApi([
+    series({
+      cancel_help: {
+        url: "https://apps.apple.com/account/subscriptions",
+        via: "Apple",
+        steps: "Billed through your Apple account. On an iPhone: Settings, your name, Subscriptions.",
+      },
+    }),
+  ]);
+  show();
+  await open();
+  expect(await screen.findByRole("link", { name: "Cancel Netflix with Apple" })).toHaveAttribute(
+    "href",
+    "https://apps.apple.com/account/subscriptions",
+  );
+  expect(screen.getByText(/Billed through your Apple account/)).toBeInTheDocument();
+});
+
+test("no known link means no cancel link, only the honest copy", async () => {
+  mockApi([series({})]);
+  show();
+  await open();
+  expect(await screen.findByText(/can't cancel anything for you/)).toBeInTheDocument();
+  expect(screen.queryByRole("link", { name: /Cancel Netflix/ })).not.toBeInTheDocument();
+});
+
+test("a cancelled series that charged again is flagged as still billing", async () => {
+  mockApi([
+    series({ status: "cancelled", cancelled_on: "2026-07-01", last_charged_on: "2026-07-14" }),
+  ]);
+  show();
+  expect(await screen.findByText("still billing you")).toBeInTheDocument();
+});
+
+test("a cancelled series with no later charge is just cancelled", async () => {
+  mockApi([
+    series({ status: "cancelled", cancelled_on: "2026-07-20", last_charged_on: "2026-07-14" }),
+  ]);
+  show();
+  expect(await screen.findByText("cancelled")).toBeInTheDocument();
+  expect(screen.queryByText("still billing you")).not.toBeInTheDocument();
 });
