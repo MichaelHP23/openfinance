@@ -115,7 +115,7 @@ def test_price_increase_fires_when_flag_is_set(db, household, account):
     s = _series(db, household, account, price_increase_amount=Decimal("3.00"))
     found = alerts.list_for(db, household.id, today=TODAY)
     assert _kinds(found) == [AlertKind.price_increase]
-    assert found[0].key == f"price_increase:{s.id}:2026-09-14"
+    assert found[0].key == f"price_increase:{s.id}:15.00"
     assert "$3.00" in found[0].body
 
 
@@ -182,7 +182,7 @@ def test_low_balance_fires_when_a_bill_takes_cash_below_zero(db, household):
     )
     found = [a for a in alerts.list_for(db, household.id, today=TODAY) if a.kind == AlertKind.low_balance]
     assert len(found) == 1
-    assert found[0].key == "low_balance:cash:2026-10-22"
+    assert found[0].key == "low_balance:cash:2026-10-01"
     assert found[0].severity == "urgent"
 
 
@@ -195,7 +195,7 @@ def test_low_balance_fires_today_when_cash_is_already_negative(db, household):
     )
     db.commit()
     found = alerts.list_for(db, household.id, today=TODAY)
-    assert [a.key for a in found] == ["low_balance:cash:2026-10-12"]
+    assert [a.key for a in found] == ["low_balance:cash:2026-10-01"]
 
 
 def test_low_balance_is_quiet_when_the_dip_is_past_fourteen_days(db, household):
@@ -280,3 +280,60 @@ def test_households_do_not_see_or_dismiss_each_others_alerts(db, household, acco
     assert alerts.list_for(db, other.id, today=TODAY) == []
     alerts.dismiss(db, other.id, key)
     assert [a.key for a in alerts.list_for(db, household.id, today=TODAY)] == [key]
+
+
+# --- Final review fixes ---------------------------------------------------------------
+
+
+def test_price_increase_dismissal_survives_the_next_charge_at_the_same_price(db, household, account):
+    s = _series(db, household, account, price_increase_amount=Decimal("3.00"))
+    alerts.dismiss(db, household.id, alerts.list_for(db, household.id, today=TODAY)[0].key)
+    s.last_charged_on = date(2026, 10, 14)
+    db.commit()
+    assert alerts.list_for(db, household.id, today=date(2026, 10, 15)) == []
+
+
+def test_price_increase_returns_when_the_price_moves_again(db, household, account):
+    s = _series(db, household, account, price_increase_amount=Decimal("3.00"))
+    alerts.dismiss(db, household.id, alerts.list_for(db, household.id, today=TODAY)[0].key)
+    s.last_amount = Decimal("21.00")
+    db.commit()
+    assert _kinds(alerts.list_for(db, household.id, today=TODAY)) == [AlertKind.price_increase]
+
+
+def test_price_increase_ignores_a_pay_rise(db, household, account):
+    _series(
+        db, household, account, label="Paycheck", direction=1,
+        typical_amount=Decimal("2000.00"), price_increase_amount=Decimal("200.00"),
+    )
+    assert alerts.list_for(db, household.id, today=TODAY) == []
+
+
+def test_large_charge_ignores_transfers_and_card_payments(db, household, account):
+    ensure_system_categories(db)
+    _txn(db, household, account, merchant="CHASE AUTOPAY", amount="-1800.00", on=date(2026, 10, 10),
+         category_id=system_category_id("Transfers/Credit Card Payment"))
+    assert alerts.list_for(db, household.id, today=TODAY) == []
+
+
+def test_low_balance_is_quiet_when_no_cash_account_exists(db, household):
+    card = Account(
+        household_id=household.id, type=AccountType.credit_card, name="Card",
+        currency="USD", balance=Decimal("300.00"),
+    )
+    db.add(card)
+    db.commit()
+    _series(db, household, card, next_expected_on=TODAY + timedelta(days=2))
+    assert _kinds(alerts.list_for(db, household.id, today=TODAY)) == [AlertKind.bill_due]
+
+
+def test_low_balance_dismissal_still_holds_the_next_day(db, household):
+    db.add(
+        Account(
+            household_id=household.id, type=AccountType.checking, name="Overdrawn",
+            currency="USD", balance=Decimal("-50.00"),
+        )
+    )
+    db.commit()
+    alerts.dismiss(db, household.id, alerts.list_for(db, household.id, today=TODAY)[0].key)
+    assert alerts.list_for(db, household.id, today=TODAY + timedelta(days=1)) == []

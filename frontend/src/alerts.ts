@@ -14,7 +14,13 @@ export type Alert = {
 };
 
 export function useAlerts() {
-  return useQuery({ queryKey: ["alerts"], queryFn: () => apiFetch<Alert[]>("/alerts") });
+  // The bell sits in the shell, so this would otherwise refetch on every navigation and
+  // window focus. A minute of staleness is fine for things measured in days.
+  return useQuery({
+    queryKey: ["alerts"],
+    queryFn: () => apiFetch<Alert[]>("/alerts"),
+    staleTime: 60_000,
+  });
 }
 
 export function useDismissAlert() {

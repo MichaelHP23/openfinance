@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useAlerts, useDismissAlert } from "./alerts";
 import type { Alert, AlertSeverity } from "./alerts";
@@ -42,28 +43,45 @@ function AlertRow({ alert }: { alert: Alert }) {
 }
 
 export function AlertsCard() {
-  const { data: alerts = [] } = useAlerts();
+  const { data: alerts = [], isError } = useAlerts();
+  const [showAll, setShowAll] = useState(false);
+  // A failed fetch must not look the same as "nothing needs attention".
+  if (isError) return <p className="mb-8 text-sm text-clay">Couldn't load alerts.</p>;
   if (alerts.length === 0) return null;
-  const extra = alerts.length - SHOWN;
+  const extra = showAll ? 0 : alerts.length - SHOWN;
   return (
     <Card className="mb-8" delay={40}>
       <h2 id="alerts" className="mb-1 text-sm font-medium">
         Needs attention
       </h2>
       <ul>
-        {alerts.slice(0, SHOWN).map((a) => (
+        {(showAll ? alerts : alerts.slice(0, SHOWN)).map((a) => (
           <AlertRow key={a.key} alert={a} />
         ))}
       </ul>
-      {extra > 0 && <p className="label mt-3">{extra} more</p>}
+      {extra > 0 && (
+        <button
+          type="button"
+          onClick={() => setShowAll(true)}
+          className="label mt-3 transition-colors hover:text-bone"
+        >
+          Show {extra} more
+        </button>
+      )}
     </Card>
   );
 }
 
 export function AlertBell() {
-  const { data: alerts = [] } = useAlerts();
+  const { data: alerts = [], isPending, isError } = useAlerts();
   const n = alerts.length;
-  const name = n === 0 ? "No alerts" : `${n} alert${n === 1 ? "" : "s"}`;
+  const name = isError
+    ? "Alerts unavailable"
+    : isPending
+      ? "Loading alerts"
+      : n === 0
+        ? "No alerts"
+        : `${n} alert${n === 1 ? "" : "s"}`;
   return (
     <Link
       to="/#alerts"

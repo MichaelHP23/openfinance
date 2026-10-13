@@ -20,10 +20,13 @@ from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
+from app.models.account import Account
 from app.models.alert_dismissal import AlertDismissal
+from app.models.category import Category
 from app.models.recurring import Cadence, RecurringSeries, SeriesStatus
 from app.models.transaction import Transaction
 from app.services import budgets, forecast, recurring
+from app.services.categories import system_category_id
 
 BILL_DUE_DAYS = 3
 YEARLY_RENEWAL_DAYS = 30
@@ -70,10 +73,39 @@ def _upcoming(s: RecurringSeries, today: date, within_days: int) -> bool:
     )
 
 
+def _latest_charges_since_cancellation(
+    db: Session, household_id: uuid.UUID, series: list[RecurringSeries]
+) -> dict[tuple[str, int], Transaction]:
+    """Newest transaction per (merchant key, sign) since the earliest cancellation date.
+
+    One bounded query for every cancelled series together. recurring.charges() loads
+    the household's whole transaction history per series, and this runs on every page.
+    """
+    dates = [
+        s.cancelled_on
+        for s in series
+        if s.status == SeriesStatus.cancelled and s.cancelled_on is not None
+    ]
+    if not dates:
+        return {}
+    since = datetime.combine(min(dates), datetime.min.time(), tzinfo=UTC)
+    txns = db.scalars(
+        select(Transaction)
+        .where(Transaction.household_id == household_id, Transaction.posted_at >= since)
+        .order_by(Transaction.posted_at.desc())
+    )
+    latest: dict[tuple[str, int], Transaction] = {}
+    for t in txns:
+        key = (recurring.merchant_key(t.merchant_normalized or t.merchant_raw), 1 if t.amount >= 0 else -1)
+        latest.setdefault(key, t)
+    return latest
+
+
 def _from_series(
     db: Session, household_id: uuid.UUID, series: list[RecurringSeries], today: date
 ) -> list[Alert]:
     out: list[Alert] = []
+    latest_charge = _latest_charges_since_cancellation(db, household_id, series)
     for s in series:
         # A yearly charge gets the longer-lead renewal alert instead of bill_due, never both.
         if s.cadence == Cadence.yearly and _upcoming(s, today, YEARLY_RENEWAL_DAYS):
@@ -105,10 +137,17 @@ def _from_series(
                 )
             )
 
-        if s.status == SeriesStatus.active and s.price_increase_amount is not None:
+        if (
+            s.status == SeriesStatus.active
+            and s.direction < 0
+            and s.price_increase_amount is not None
+        ):
             out.append(
                 Alert(
-                    key=_key(AlertKind.price_increase, s.id, s.last_charged_on),
+                    # Keyed on the new price, not the charge date: the flag stays set for
+                    # months while the median catches up, and a dismissal has to outlive
+                    # every charge at the same price.
+                    key=f"{AlertKind.price_increase.value}:{s.id}:{s.last_amount:.2f}",
                     kind=AlertKind.price_increase,
                     severity="warn",
                     title=f"{s.label} went up",
@@ -119,9 +158,9 @@ def _from_series(
             )
 
         if s.status == SeriesStatus.cancelled and s.cancelled_on is not None:
-            charges = recurring.charges(db, household_id, s)
-            if charges and charges[0].posted_at.date() > s.cancelled_on:
-                charged_on = charges[0].posted_at.date()
+            charge = latest_charge.get((s.merchant_key, s.direction))
+            if charge is not None and charge.posted_at.date() > s.cancelled_on:
+                charged_on = charge.posted_at.date()
                 out.append(
                     Alert(
                         key=_key(AlertKind.still_billing, s.id, charged_on),
@@ -129,7 +168,7 @@ def _from_series(
                         severity="urgent",
                         title=f"{s.label} is still billing you",
                         body=f"You marked it cancelled on {s.cancelled_on.isoformat()}, "
-                        f"but it charged ${abs(charges[0].amount):,.2f} on "
+                        f"but it charged ${abs(charge.amount):,.2f} on "
                         f"{charged_on.isoformat()}.",
                         href="/recurring",
                         occurred_on=charged_on,
@@ -139,6 +178,17 @@ def _from_series(
 
 
 def _low_balance(db: Session, household_id: uuid.UUID, today: date) -> list[Alert]:
+    # No cash account means the forecast starts from zero and every bill "overdraws" it.
+    has_cash = db.scalar(
+        select(Account.id)
+        .where(
+            Account.household_id == household_id,
+            Account.type.in_(forecast.CASH_ACCOUNT_TYPES),
+        )
+        .limit(1)
+    )
+    if has_cash is None:
+        return []
     horizon = today + timedelta(days=LOW_BALANCE_DAYS)
     for day in forecast.project(db, household_id, 1, today=today):
         if day.on > horizon:
@@ -149,7 +199,10 @@ def _low_balance(db: Session, household_id: uuid.UUID, today: date) -> list[Aler
                 Alert(
                     # "cash" stands in for a subject id: the alert is about all cash
                     # accounts together, which is what the forecast sums.
-                    key=_key(AlertKind.low_balance, "cash", day.on),
+                    # ponytail: keyed on the month, not the day — the first negative day
+                    # drifts as balances move, and a day key made dismissal last one day.
+                    # Ceiling: a second, separate dip in the same month stays dismissed.
+                    key=_key(AlertKind.low_balance, "cash", day.on.replace(day=1)),
                     kind=AlertKind.low_balance,
                     severity="urgent",
                     title="Cash is projected to go negative",
@@ -195,8 +248,16 @@ def _large_charges(
         )
     )
     usual = {s.merchant_key: s.typical_amount for s in series if s.direction < 0}
+    # Card payments and moves between your own accounts are large and are not spending.
+    transfers = set(
+        db.scalars(
+            select(Category.id).where(Category.parent_id == system_category_id("Transfers"))
+        )
+    )
     out: list[Alert] = []
     for t in txns:
+        if t.category_id in transfers:
+            continue
         name = t.merchant_normalized or t.merchant_raw
         amount = abs(t.amount)
         typical = usual.get(recurring.merchant_key(name))

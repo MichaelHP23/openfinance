@@ -21,13 +21,19 @@ const alert = (over: Partial<Alert> = {}): Alert => ({
 
 function show(node: React.ReactNode) {
   return render(
-    <QueryClientProvider client={new QueryClient()}>
+    <QueryClientProvider
+      client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
+    >
       <MemoryRouter>{node}</MemoryRouter>
     </QueryClientProvider>,
   );
 }
 
-beforeEach(() => vi.mocked(apiFetch).mockReset());
+// Braces matter: mockReset() returns the mock, and vitest treats a function returned
+// from beforeEach as a teardown callback — it would call apiFetch after every test.
+beforeEach(() => {
+  vi.mocked(apiFetch).mockReset();
+});
 
 describe("AlertsCard", () => {
   it("lists alerts with a link to where each one is handled", async () => {
@@ -53,7 +59,16 @@ describe("AlertsCard", () => {
     show(<AlertsCard />);
     expect(await screen.findByText("Alert 4")).toBeInTheDocument();
     expect(screen.queryByText("Alert 5")).not.toBeInTheDocument();
-    expect(screen.getByText("2 more")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Show 2 more" }));
+    expect(await screen.findByText("Alert 6")).toBeInTheDocument();
+  });
+
+  it("says alerts could not be loaded instead of looking all-clear", async () => {
+    vi.mocked(apiFetch).mockImplementation(async () => {
+      throw new Error("boom");
+    });
+    show(<AlertsCard />);
+    expect(await screen.findByText("Couldn't load alerts.")).toBeInTheDocument();
   });
 
   it("posts the key when an alert is dismissed", async () => {
@@ -74,6 +89,14 @@ describe("AlertBell", () => {
     vi.mocked(apiFetch).mockResolvedValue([alert(), alert({ key: "k2" })]);
     show(<AlertBell />);
     expect(await screen.findByRole("link", { name: "2 alerts" })).toBeInTheDocument();
+  });
+
+  it("does not claim there are no alerts when the fetch failed", async () => {
+    vi.mocked(apiFetch).mockImplementation(async () => {
+      throw new Error("boom");
+    });
+    show(<AlertBell />);
+    expect(await screen.findByRole("link", { name: "Alerts unavailable" })).toBeInTheDocument();
   });
 
   it("says so when there are none", async () => {
