@@ -5,6 +5,7 @@ import { monthlySeries, monthTotals, netWorth, topMerchants, usd, usdCompact } f
 import { Assistant, NetWorthChart } from "../insights";
 import { Card, Empty, PageHead } from "../ui/Shell";
 import { ForecastChart } from "../ForecastChart";
+import { AlertsCard } from "../AlertsCard";
 
 const NOW = new Date();
 const THIS_MONTH = `${NOW.getFullYear()}-${String(NOW.getMonth() + 1).padStart(2, "0")}`;
@@ -36,6 +37,8 @@ export function OverviewPage() {
         title="Overview"
         sub={NOW.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
       />
+
+      <AlertsCard />
 
       <section className="rise mb-10" style={{ "--d": "60ms" } as React.CSSProperties}>
         <p className="label">Net worth</p>

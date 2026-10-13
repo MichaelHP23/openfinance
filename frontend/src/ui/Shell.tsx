@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { NavLink } from "react-router-dom";
 import { apiFetch } from "../api/client";
+import { AlertBell } from "../AlertsCard";
 import { MoreMenu } from "./MoreMenu";
 
 // Three fixed mobile tabs, down from five — see PLAN-CONSTRAINTS.md's Navigation
@@ -39,6 +40,7 @@ export function Shell({ children, localMode }: { children: ReactNode; localMode:
           <div className="mb-10 flex items-baseline gap-2">
             <span className="font-display text-3xl leading-none text-acid">O</span>
             <span className="text-sm font-medium tracking-[0.2em] uppercase">Finance</span>
+            <AlertBell />
           </div>
 
           <nav className="flex flex-col gap-1">
@@ -88,6 +90,7 @@ export function Shell({ children, localMode }: { children: ReactNode; localMode:
         <header className="flex items-baseline gap-2 border-b border-line px-5 py-4 md:hidden">
           <span className="font-display text-2xl leading-none text-acid">O</span>
           <span className="text-xs font-medium tracking-[0.2em] uppercase">Finance</span>
+          <AlertBell />
         </header>
 
         <main className="min-w-0 flex-1 px-5 py-6 pb-28 md:px-10 md:py-12 md:pb-12">
