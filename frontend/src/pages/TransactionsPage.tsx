@@ -12,7 +12,14 @@ export function TransactionsPage() {
 
   return (
     <>
-      <PageHead title="Transactions" sub="Enter by hand, or import your bank's CSV export" />
+      <PageHead title="Transactions" sub="Everything that has moved, newest first" />
+
+      <Card delay={60}>
+        <h2 className="mb-4 text-sm font-medium">History</h2>
+        <TransactionList />
+      </Card>
+
+      <UncategorizedCard />
 
       {accounts.length === 0 ? (
         <Empty>
@@ -23,7 +30,7 @@ export function TransactionsPage() {
           .
         </Empty>
       ) : (
-        <Card delay={60}>
+        <Card className="mt-4" delay={120}>
           <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
             <h2 className="text-sm font-medium">Add to</h2>
             <label className="flex min-w-0 items-center gap-2">
@@ -48,13 +55,6 @@ export function TransactionsPage() {
           </div>
         </Card>
       )}
-
-      <Card className="mt-4" delay={120}>
-        <h2 className="mb-4 text-sm font-medium">History</h2>
-        <TransactionList />
-      </Card>
-
-      <UncategorizedCard />
       <RulesCard />
     </>
   );
