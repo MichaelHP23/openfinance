@@ -1,7 +1,7 @@
 # Rocket Money PC experience — research and clone plan
 
 **Date:** 2026-10-13
-**Status:** Research complete for everything reachable without an account. §8 steps 1–3 (shell, dashboard, transactions) are built and live; 4–6 are not.
+**Status:** Research complete for everything reachable without an account. §8 steps 1–4 and Net Worth from step 5 are built and live; the recurring ••• menu, Spending, budget rings, and category icon/colour are not.
 **Why this exists:** three rounds of restyling did not make the app look like Rocket Money. The earlier spec (`2026-10-12-rocket-money-features-design.md`) inventoried *features* from public docs; nobody had looked at the *screens*. This document is the screens.
 
 ## 1. Tools: what was found, used, and blocked
