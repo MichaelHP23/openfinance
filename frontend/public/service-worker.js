@@ -9,7 +9,7 @@
 //
 // Bump CACHE_VERSION by hand whenever this file's caching behavior changes — it is the only
 // invalidation signal a runtime cache has, since there's no build step generating one.
-const CACHE_VERSION = "v1";
+const CACHE_VERSION = "v2";
 const SHELL_CACHE = `shell-${CACHE_VERSION}`;
 const API_CACHE = `api-${CACHE_VERSION}`;
 
@@ -25,6 +25,13 @@ self.addEventListener("activate", (event) => {
         keys.filter((k) => k !== SHELL_CACHE && k !== API_CACHE).map((k) => caches.delete(k)),
       );
       await self.clients.claim();
+      // A worker that replaces an older one reloads the pages that older one served, so
+      // nobody sits on a stale shell until they think to refresh. v1 cached index.html
+      // cache-first and never let go of it; this is what gets those browsers unstuck.
+      if (keys.some((k) => k.startsWith("shell-") && k !== SHELL_CACHE)) {
+        const pages = await self.clients.matchAll({ type: "window" });
+        await Promise.all(pages.map((page) => page.navigate(page.url).catch(() => {})));
+      }
     })(),
   );
 });
@@ -39,9 +46,32 @@ self.addEventListener("fetch", (event) => {
 
   const url = new URL(request.url);
 
+  if (url.origin === self.location.origin && request.mode === "navigate") {
+    // The page itself: network-first. index.html names the content-hashed bundle, so a
+    // cached copy pins the whole app to the build it came from — a deploy would never
+    // show up. The cache is only for when the network is gone.
+    event.respondWith(
+      fetch(request)
+        .then((response) => {
+          if (response.ok) {
+            const copy = response.clone();
+            caches.open(SHELL_CACHE).then((cache) => cache.put(request, copy));
+          }
+          return response;
+        })
+        .catch(() =>
+          caches
+            .match(request)
+            .then((cached) => cached ?? caches.match("/"))
+            .then((cached) => cached ?? Promise.reject(new Error("offline"))),
+        ),
+    );
+    return;
+  }
+
   if (url.origin === self.location.origin) {
-    // App shell: cache-first. First visit to any given asset populates the cache; every
-    // later visit — online or not — serves instantly from it.
+    // Everything else same-origin: cache-first. Bundles are content-hashed, so a cached
+    // one is never stale — a new build asks for a new name.
     event.respondWith(
       caches.match(request).then(
         (cached) =>
