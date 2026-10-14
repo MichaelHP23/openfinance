@@ -39,7 +39,7 @@ export function Shell({ children, localMode }: { children: ReactNode; localMode:
       <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col justify-between border-r border-line bg-surface px-5 py-7 md:flex">
         <div>
           <div className="mb-10 flex items-baseline gap-2">
-            <span className="font-display text-3xl leading-none text-acid">O</span>
+            <span className="font-display text-3xl leading-none text-brand">O</span>
             <span className="text-sm font-medium tracking-[0.2em] uppercase">Finance</span>
             <AlertBell />
           </div>
@@ -54,7 +54,7 @@ export function Shell({ children, localMode }: { children: ReactNode; localMode:
                   [
                     "relative rounded-lg px-3 py-2 text-sm transition-colors",
                     isActive
-                      ? "bg-tint font-medium text-acid"
+                      ? "bg-tint font-medium text-brand"
                       : "text-muted hover:bg-hover hover:text-bone",
                   ].join(" ")
                 }
@@ -62,7 +62,7 @@ export function Shell({ children, localMode }: { children: ReactNode; localMode:
                 {({ isActive }) => (
                   <>
                     {isActive && (
-                      <span className="absolute top-1/2 left-0 h-4 w-[2px] -translate-y-1/2 rounded-full bg-acid" />
+                      <span className="absolute top-1/2 left-0 h-4 w-[2px] -translate-y-1/2 rounded-full bg-brand" />
                     )}
                     {n.label}
                   </>
@@ -88,8 +88,8 @@ export function Shell({ children, localMode }: { children: ReactNode; localMode:
 
       <div className="flex min-w-0 flex-1 flex-col">
         {/* The sidebar is desktop-only, so small screens get their own header… */}
-        <header className="flex items-baseline gap-2 border-b border-line bg-surface px-5 py-4 md:hidden">
-          <span className="font-display text-2xl leading-none text-acid">O</span>
+        <header className="flex items-baseline gap-2 bg-brand px-5 py-4 text-white md:hidden [&_a]:text-white">
+          <span className="font-display text-2xl leading-none">O</span>
           <span className="text-xs font-medium tracking-[0.2em] uppercase">Finance</span>
           <AlertBell />
         </header>
@@ -115,7 +115,7 @@ export function Shell({ children, localMode }: { children: ReactNode; localMode:
             className={({ isActive }) =>
               [
                 "flex flex-1 flex-col items-center gap-1 py-2.5 text-[11px] transition-colors",
-                isActive ? "text-acid" : "text-muted",
+                isActive ? "text-brand" : "text-muted",
               ].join(" ")
             }
           >

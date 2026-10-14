@@ -112,7 +112,7 @@ export function AuthPage({ mode }: { mode: keyof typeof MODES }) {
     <div className="grid min-h-screen lg:grid-cols-2">
       <aside className="relative hidden flex-col justify-between border-r border-line p-12 lg:flex">
         <div className="flex items-baseline gap-2">
-          <span className="font-display text-3xl leading-none text-acid">O</span>
+          <span className="font-display text-3xl leading-none text-brand">O</span>
           <span className="text-sm font-medium tracking-[0.2em] uppercase">Finance</span>
         </div>
         <div>
