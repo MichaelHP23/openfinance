@@ -26,8 +26,9 @@ Otherwise it runs `docker compose up -d` in the nearest folder above the exe tha
 `docker-compose.yml`, waits up to 90 seconds for `/health`, then opens
 `http://localhost:5173` in an Edge app window (default browser if Edge is missing).
 
-If your stack was started from a different folder — a git worktree, say — pass that
-folder as the argument (a shortcut's Target can carry it):
+If your stack was started from a different folder — a git worktree, say — name that
+folder on the first line of `launcher/compose-dir.txt` (git-ignored), or pass it as the
+argument:
 
     OpenFinance.exe "C:\path\to\folder-with-docker-compose"
 

@@ -9,3 +9,4 @@ dist/
 *.egg-info/
 .worktrees/
 ops/launcher/*.exe
+ops/launcher/compose-dir.txt

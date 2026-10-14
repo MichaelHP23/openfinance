@@ -22,7 +22,7 @@ static class Launcher
 
     // Compose services are `restart: unless-stopped`, so right after Docker Desktop starts
     // they come back on their own. Waiting briefly before `compose up` avoids racing them.
-    const int RestartGraceSeconds = 15;
+    const int RestartGraceSeconds = 45;
     const int StartupTimeoutSeconds = 90;
     const int CommandTimeoutSeconds = 300; // a first run pulls and builds images
 
@@ -36,11 +36,12 @@ static class Launcher
 
             if (!WaitForHealth(RestartGraceSeconds))
             {
-                // An argument names the folder holding docker-compose.yml, for a stack that
-                // lives somewhere other than the repository this exe was built in. Compose
-                // names its project after that folder, so the wrong folder means a second,
-                // empty database rather than the one with your data in it.
-                string dir = args.Length > 0 ? args[0] : FindComposeDir();
+                // Compose names its project after the folder it runs in, so the wrong folder
+                // means a second, empty stack rather than the one with your data in it —
+                // which is what happened the first time this ran while the API was
+                // restarting. The folder therefore comes from, in order: the argument,
+                // compose-dir.txt beside this exe, and only then the repository around it.
+                string dir = args.Length > 0 ? args[0] : (ReadComposeDirFile() ?? FindComposeDir());
                 if (dir == null || !File.Exists(Path.Combine(dir, "docker-compose.yml")))
                     return Fail("Could not find docker-compose.yml.\n\nKeep OpenFinance.exe inside the repository, or pass the folder that holds docker-compose.yml as its argument.");
 
@@ -106,6 +107,19 @@ static class Launcher
         {
             return -1; // not installed, or not on PATH
         }
+    }
+
+    /// <summary>First line of compose-dir.txt beside the exe, or null if there is none.</summary>
+    static string ReadComposeDirFile()
+    {
+        string file = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "compose-dir.txt");
+        if (!File.Exists(file)) return null;
+        foreach (string line in File.ReadAllLines(file))
+        {
+            string trimmed = line.Trim();
+            if (trimmed.Length > 0) return trimmed;
+        }
+        return null;
     }
 
     /// <summary>The nearest folder at or above this exe that holds docker-compose.yml.</summary>
