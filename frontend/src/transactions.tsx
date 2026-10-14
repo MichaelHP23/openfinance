@@ -4,7 +4,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { API_BASE, apiFetch } from "./api/client";
 import { CategoryPicker } from "./CategoryPicker";
 import { useCreateRule } from "./categories";
-import { useTransactions, type Txn } from "./data";
+import { useTags, useTransactions, type Txn } from "./data";
 import { shortDate, usd } from "./money";
 import { Empty } from "./ui/Shell";
 
@@ -52,14 +52,29 @@ function TxnRow({ txn, index }: { txn: Txn; index: number }) {
     onError: () => setPendingCategory(undefined),
   });
 
+  // Ignoring a row moves every total in the app, so everything refetches.
+  // ponytail: blanket invalidate; narrow to named keys if the refetch storm ever shows.
+  const patch = useMutation({
+    mutationFn: (body: { ignored: boolean } | { tags: string[] }) =>
+      apiFetch(`/transactions/${txn.id}`, { method: "PATCH", body: JSON.stringify(body) }),
+    onSuccess: () => qc.invalidateQueries(),
+  });
+  const tagText = txn.tags.join(", ");
+  const dim = txn.ignored ? "opacity-50" : "";
+
   return (
     <>
       <tr
-        className="rise border-b border-line/60 transition-colors last:border-0 hover:bg-[rgba(237,234,228,0.02)]"
+        className="rise transition-colors hover:bg-[rgba(237,234,228,0.02)]"
         style={{ "--d": `${Math.min(index, 12) * 30}ms` } as React.CSSProperties}
       >
-        <td className="tnum w-24 py-3 text-[13px] text-muted">{shortDate(txn.posted_at)}</td>
-        <td className="py-3 text-sm">{txn.merchant_raw}</td>
+        <td className={`tnum w-24 py-3 text-[13px] text-muted ${dim}`}>
+          {shortDate(txn.posted_at)}
+        </td>
+        <td className="pb-1 pt-3 text-sm">
+          <span className={dim}>{txn.merchant_raw}</span>
+          {txn.ignored && <span className="block text-[11px] text-muted">Ignored</span>}
+        </td>
         <td className="py-3">
           <CategoryPicker
             value={pendingCategory !== undefined ? pendingCategory : txn.category_id}
@@ -76,11 +91,51 @@ function TxnRow({ txn, index }: { txn: Txn; index: number }) {
           )}
         </td>
         <td
-          className={`tnum py-3 text-right text-sm ${
+          className={`tnum py-3 text-right text-sm ${dim} ${
             Number(txn.amount) > 0 ? "text-acid" : "text-bone"
           }`}
         >
           {Number(txn.amount) > 0 ? `+${usd(txn.amount)}` : usd(txn.amount)}
+        </td>
+      </tr>
+      <tr className="border-b border-line/60 last:border-0">
+        <td />
+        <td colSpan={3} className="pb-3">
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Uncontrolled, re-keyed on the saved value: the API trims and lower-cases,
+                so the field picks up what was actually stored once the refetch lands. */}
+            <input
+              key={tagText}
+              className="w-44 text-[13px]"
+              aria-label={`Tags for ${txn.merchant_raw}`}
+              placeholder="Tags, comma separated"
+              defaultValue={tagText}
+              onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
+              onBlur={(e) => {
+                if (e.target.value.trim() === tagText) return;
+                const tags = e.target.value
+                  .split(",")
+                  .map((t) => t.trim())
+                  .filter(Boolean);
+                patch.mutate({ tags });
+              }}
+            />
+            <button
+              className="text-[13px] text-muted"
+              aria-label={`${txn.ignored ? "Count" : "Ignore"} ${txn.merchant_raw}`}
+              title={
+                txn.ignored
+                  ? "Count this in spending totals again"
+                  : "Leave this out of spending totals and budgets"
+              }
+              onClick={() => patch.mutate({ ignored: !txn.ignored })}
+            >
+              {txn.ignored ? "Count it" : "Ignore"}
+            </button>
+          </div>
+          {patch.isError && (
+            <p className="mt-1 text-[13px] text-clay">{(patch.error as Error).message}</p>
+          )}
         </td>
       </tr>
       {askAbout && (
@@ -113,20 +168,40 @@ function TxnRow({ txn, index }: { txn: Txn; index: number }) {
 
 export function TransactionList() {
   const [search, setSearch] = useState("");
-  const { data = [], isLoading } = useTransactions(search);
+  const [tag, setTag] = useState("");
+  const { data = [], isLoading } = useTransactions(search, tag);
+  const { data: tags = [] } = useTags();
 
   return (
     <div>
-      <input
-        className="mb-3 w-full"
-        placeholder="Search merchant…"
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-      />
+      <div className="mb-3 flex gap-2">
+        <input
+          className="min-w-0 flex-1"
+          placeholder="Search merchant…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+        {/* `tag` stays listed even after its last use is removed, so the filter can
+            always be cleared from the control that set it. */}
+        {(tags.length > 0 || tag) && (
+          <select aria-label="Filter by tag" value={tag} onChange={(e) => setTag(e.target.value)}>
+            <option value="">All tags</option>
+            {[...new Set([...tags, ...(tag ? [tag] : [])])].map((t) => (
+              <option key={t}>{t}</option>
+            ))}
+          </select>
+        )}
+      </div>
       {isLoading ? (
         <Empty>Loading…</Empty>
       ) : data.length === 0 ? (
-        <Empty>{search ? `Nothing matching “${search}”.` : "No transactions yet."}</Empty>
+        <Empty>
+          {search
+            ? `Nothing matching “${search}”.`
+            : tag
+              ? `Nothing tagged “${tag}”.`
+              : "No transactions yet."}
+        </Empty>
       ) : (
         <TxnRows txns={data} />
       )}

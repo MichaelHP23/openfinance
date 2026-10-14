@@ -119,7 +119,7 @@ def _spend_by_category(
     since = datetime.combine(args.start, datetime.min.time(), tzinfo=UTC)
     until = datetime.combine(args.end, datetime.max.time(), tzinfo=UTC)
     txns = transactions_service.list_for(db, household_id, since=since, until=until)
-    spend = [t for t in txns if t.amount < 0]
+    spend = [t for t in txns if t.amount < 0 and not t.ignored]
 
     if args.group_by == "month":
         totals: dict[str, Decimal] = defaultdict(lambda: Decimal(0))
@@ -186,6 +186,8 @@ def _transaction_search(
                 "date": t.posted_at.date().isoformat(),
                 "merchant": t.merchant_normalized or t.merchant_raw,
                 "amount": _money(t.amount),
+                # The user has left this out of their spending; so should any sum.
+                "ignored": t.ignored,
             }
             for t in rows
         ],

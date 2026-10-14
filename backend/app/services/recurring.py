@@ -316,7 +316,9 @@ def detect(db: Session, household_id: uuid.UUID) -> DetectionResult:
     txns = list(
         db.scalars(
             select(Transaction).where(
-                Transaction.household_id == household_id, Transaction.posted_at >= since
+                Transaction.household_id == household_id,
+                Transaction.posted_at >= since,
+                Transaction.ignored.is_(False),
             )
         )
     )

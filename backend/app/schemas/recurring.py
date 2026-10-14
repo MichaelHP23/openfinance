@@ -59,6 +59,8 @@ class ChargeOut(BaseModel):
     # ledger uses — which now carries a category picker. Without this it always reads
     # "Uncategorized", whatever the row actually is.
     category_id: uuid.UUID | None = None
+    ignored: bool = False
+    tags: list[str] = []
     model_config = {"from_attributes": True}
 
 

@@ -35,6 +35,8 @@ def _serialize(value: object) -> str:
         return ""
     if isinstance(value, (Decimal, date, datetime, uuid.UUID)):
         return str(value)
+    if isinstance(value, list):  # transactions.tags. A tag containing ";" will not round-trip.
+        return ";".join(str(v) for v in value)
     if hasattr(value, "value"):  # str-backed Enum members
         return str(value.value)
     return str(value)

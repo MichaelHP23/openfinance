@@ -245,6 +245,7 @@ def _large_charges(
             Transaction.household_id == household_id,
             Transaction.posted_at >= since,
             Transaction.amount < 0,
+            Transaction.ignored.is_(False),
         )
     )
     usual = {s.merchant_key: s.typical_amount for s in series if s.direction < 0}

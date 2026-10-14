@@ -47,6 +47,8 @@ export type Charge = {
   amount: string;
   account_id: string | null;
   category_id: string | null;
+  ignored: boolean;
+  tags: string[];
 };
 
 export type SeriesDetail = Series & { charges: Charge[] };
@@ -352,6 +354,8 @@ function SeriesBody({ series: s }: { series: Series }) {
                 amount: c.amount,
                 currency: "USD",
                 category_id: c.category_id,
+                ignored: c.ignored,
+                tags: c.tags,
               }))}
             />
           </div>

@@ -139,8 +139,8 @@ test("expanding a series shows its charges and the honest cancellation copy", as
     [series({})],
     summary(),
     [
-      { id: "c1", posted_at: "2026-07-14T00:00:00Z", amount: "-15.49", account_id: "a1" },
-      { id: "c2", posted_at: "2026-06-14T00:00:00Z", amount: "-15.49", account_id: "a1" },
+      { id: "c1", posted_at: "2026-07-14T00:00:00Z", amount: "-15.49", account_id: "a1", ignored: false, tags: [] },
+      { id: "c2", posted_at: "2026-06-14T00:00:00Z", amount: "-15.49", account_id: "a1", ignored: false, tags: [] },
     ],
   );
   show();

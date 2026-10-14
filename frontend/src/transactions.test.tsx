@@ -26,6 +26,8 @@ const txn: Txn = {
   amount: "-9.99",
   currency: "USD",
   category_id: "c1",
+  ignored: false,
+  tags: [],
 };
 
 beforeEach(() => vi.mocked(apiFetch).mockReset());
@@ -34,7 +36,7 @@ beforeEach(() => vi.mocked(apiFetch).mockReset());
 // not .startsWith: apiFetch here is a shared vi.fn() reset between tests, and matching
 // on exact path (with a fallback) is what the rest of this file's mocks do too.
 function listFixtureImpl(path: string) {
-  if (path === "/categories") return Promise.resolve([]);
+  if (path === "/categories" || path === "/transactions/tags") return Promise.resolve([]);
   return Promise.resolve([
     {
       id: "1",
@@ -43,6 +45,8 @@ function listFixtureImpl(path: string) {
       amount: "-9.99",
       currency: "USD",
       category_id: null,
+      ignored: false,
+      tags: [],
     },
     {
       id: "2",
@@ -51,6 +55,8 @@ function listFixtureImpl(path: string) {
       amount: "2500.00",
       currency: "USD",
       category_id: null,
+      ignored: false,
+      tags: [],
     },
   ]);
 }
@@ -139,4 +145,68 @@ test("keeps the rule prompt open and shows the error when 'Make it a rule' fails
   fireEvent.click(makeRuleBtn);
   expect(await screen.findByText("Category not found")).toBeInTheDocument();
   expect(screen.getByText("Make it a rule")).toBeInTheDocument();
+});
+
+const patchBody = () => {
+  const call = vi.mocked(apiFetch).mock.calls.find(([path]) => path === "/transactions/1");
+  return JSON.parse(((call ?? [])[1] as RequestInit).body as string);
+};
+
+test("Ignore sends ignored: true", async () => {
+  vi.mocked(apiFetch).mockResolvedValue([] as never);
+  render(<TxnRows txns={[txn]} />, { wrapper });
+  fireEvent.click(screen.getByRole("button", { name: "Ignore Whole Foods" }));
+  await waitFor(() => expect(patchBody()).toEqual({ ignored: true }));
+});
+
+test("an ignored row says so and offers to count it again", async () => {
+  vi.mocked(apiFetch).mockResolvedValue([] as never);
+  render(<TxnRows txns={[{ ...txn, ignored: true }]} />, { wrapper });
+  expect(screen.getByText("Ignored")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Count Whole Foods" }));
+  await waitFor(() => expect(patchBody()).toEqual({ ignored: false }));
+});
+
+test("editing tags sends them as a list when the field loses focus", async () => {
+  vi.mocked(apiFetch).mockResolvedValue([] as never);
+  render(<TxnRows txns={[{ ...txn, tags: ["tax"] }]} />, { wrapper });
+  const input = screen.getByLabelText("Tags for Whole Foods") as HTMLInputElement;
+  expect(input.value).toBe("tax");
+  fireEvent.change(input, { target: { value: "tax, Reimbursable ,," } });
+  fireEvent.blur(input);
+  await waitFor(() => expect(patchBody()).toEqual({ tags: ["tax", "Reimbursable"] }));
+});
+
+test("leaving the tags field unchanged sends nothing", async () => {
+  vi.mocked(apiFetch).mockResolvedValue([] as never);
+  render(<TxnRows txns={[{ ...txn, tags: ["tax"] }]} />, { wrapper });
+  fireEvent.blur(screen.getByLabelText("Tags for Whole Foods"));
+  await screen.findByLabelText("Category for Whole Foods");
+  expect(vi.mocked(apiFetch).mock.calls.some(([path]) => path === "/transactions/1")).toBe(false);
+});
+
+test("a rejected tag shows the API's reason", async () => {
+  vi.mocked(apiFetch).mockImplementation(async (path: string) => {
+    if (path === "/transactions/1") throw new Error("at most 10 tags per transaction");
+    return [];
+  });
+  render(<TxnRows txns={[txn]} />, { wrapper });
+  const input = screen.getByLabelText("Tags for Whole Foods");
+  fireEvent.change(input, { target: { value: "a" } });
+  fireEvent.blur(input);
+  expect(await screen.findByText("at most 10 tags per transaction")).toBeInTheDocument();
+});
+
+test("picking a tag filters the list by it", async () => {
+  vi.mocked(apiFetch).mockImplementation(async (path: string) => {
+    if (path === "/transactions/tags") return ["tax"];
+    if (path === "/transactions?tag=tax") return [{ ...txn, merchant_raw: "Accountant", tags: ["tax"] }];
+    if (path === "/transactions") return [txn];
+    return [];
+  });
+  renderList();
+  await screen.findByText("Whole Foods");
+  await screen.findByRole("option", { name: "tax" });
+  fireEvent.change(screen.getByLabelText("Filter by tag"), { target: { value: "tax" } });
+  expect(await screen.findByText("Accountant")).toBeInTheDocument();
 });
