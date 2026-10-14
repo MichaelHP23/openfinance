@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "./api/client";
 import { BarChart } from "./charts";
-import { shortDate, usd } from "./money";
+import { shortDate, signedAmount, usd } from "./money";
 import { SERIES } from "./palette";
 import { TxnRows } from "./transactions";
 import { Card, Empty, Stat } from "./ui/Shell";
@@ -58,7 +58,8 @@ export type Summary = {
   monthly_committed: string;
   monthly_incoming: string;
   active_count: number;
-  upcoming: { id: string; label: string; on: string; amount: string }[];
+  // `amount` is a magnitude; `direction` is -1 for money out, 1 for money in.
+  upcoming: { id: string; label: string; on: string; amount: string; direction: number }[];
   price_increases: number;
   last_detected_at: string | null;
 };
@@ -128,9 +129,6 @@ const CALENDAR_DAYS = 35;
 const discColour = (name: string) =>
   SERIES[[...name].reduce((n, ch) => n + ch.charCodeAt(0), 0) % SERIES.length];
 
-const signedAmount = (amount: string) =>
-  Number(amount) > 0 ? `+${usd(amount)}` : usd(Math.abs(Number(amount)));
-
 /** Five weeks from this week's Sunday, a disc on each day something is expected.
  * It is the overview; the list under it carries the names and amounts, so a cell needs
  * no room for text and the grid still works at phone width. */
@@ -167,7 +165,7 @@ export function BillCalendar({
               role="gridcell"
               aria-current={isToday(d) ? "date" : undefined}
               aria-label={`${short(d)}: ${due.length ? `${due.length} expected` : "nothing expected"}`}
-              title={due.map((u) => `${u.label} ${signedAmount(u.amount)}`).join("\n") || undefined}
+              title={due.map((u) => `${u.label} ${signedAmount(u)}`).join("\n") || undefined}
               className={`flex min-h-14 flex-col items-center gap-1 rounded-lg border p-1.5 ${
                 isToday(d) ? "border-brand" : "border-line"
               } ${d < today && !isToday(d) ? "opacity-40" : ""}`}
@@ -226,7 +224,11 @@ export function UpcomingCard({ delay = 100 }: { delay?: number }) {
                 <span className="tnum w-16 shrink-0 text-right text-[13px] text-muted">
                   {shortDate(u.on)}
                 </span>
-                <span className="tnum w-24 shrink-0 text-right text-sm">{usd(u.amount)}</span>
+                <span
+                  className={`tnum w-24 shrink-0 text-right text-sm ${u.direction > 0 ? "text-acid" : ""}`}
+                >
+                  {signedAmount(u)}
+                </span>
               </li>
             ))}
           </ul>

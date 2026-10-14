@@ -93,7 +93,8 @@ class UpcomingOut(BaseModel):
     id: uuid.UUID
     label: str
     on: date
-    amount: Decimal
+    amount: Decimal  # a magnitude, always positive
+    direction: int  # -1 money out, 1 money in
 
 
 class SummaryOut(BaseModel):

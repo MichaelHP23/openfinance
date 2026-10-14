@@ -38,7 +38,7 @@ const summary = (over: Partial<Summary> = {}): Summary => ({
   monthly_committed: "412.3700",
   monthly_incoming: "5200.0000",
   active_count: 14,
-  upcoming: [{ id: "s1", label: "Netflix", on: "2026-08-14", amount: "17.9900" }],
+  upcoming: [{ id: "s1", label: "Netflix", on: "2026-08-14", amount: "17.9900", direction: -1 }],
   price_increases: 0,
   last_detected_at: "2026-07-26T04:11:03Z",
   ...over,
@@ -251,10 +251,10 @@ test("a day with charges says how many and names them on hover", () => {
     <BillCalendar
       today={new Date(2026, 6, 15)}
       upcoming={[
-        { id: "s1", label: "Netflix", on: "2026-07-20", amount: "-15.49" },
-        { id: "s2", label: "City Power", on: "2026-07-20", amount: "-64.20" },
-        { id: "s3", label: "Payroll", on: "2026-07-31", amount: "3200.00" },
-        { id: "s4", label: "Too far out", on: "2026-09-30", amount: "-1.00" },
+        { id: "s1", label: "Netflix", on: "2026-07-20", amount: "15.49", direction: -1 },
+        { id: "s2", label: "City Power", on: "2026-07-20", amount: "64.20", direction: -1 },
+        { id: "s3", label: "Payroll", on: "2026-07-31", amount: "3200.00", direction: 1 },
+        { id: "s4", label: "Too far out", on: "2026-09-30", amount: "1.00", direction: -1 },
       ]}
     />,
   );

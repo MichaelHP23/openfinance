@@ -20,6 +20,7 @@ const NAV = [
 // the wordmark) and the phone's More sheet keeps it at the bottom.
 export const MORE = [
   { to: "/budgets", label: "Budgets", short: "Budgets", end: false, glyph: "▥" },
+  { to: "/net-worth", label: "Net Worth", short: "Net Worth", end: false, glyph: "◒" },
   { to: "/goals", label: "Goals", short: "Goals", end: false, glyph: "◎" },
   { to: "/accounts", label: "Accounts", short: "Accounts", end: false, glyph: "▤" },
   { to: "/investments", label: "Investments", short: "Invest", end: false, glyph: "◈" },

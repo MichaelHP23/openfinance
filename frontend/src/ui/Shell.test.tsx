@@ -27,6 +27,7 @@ test("the sidebar lists the money pages in order, with Settings behind a gear in
     "Spending",
     "Transactions",
     "Budgets",
+    "Net Worth",
     "Goals",
     "Accounts",
     "Investments",

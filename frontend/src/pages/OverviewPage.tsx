@@ -13,6 +13,7 @@ import {
   monthTotals,
   netWorth,
   shortDate,
+  signedAmount,
   topMerchants,
   usd,
   usdCompact,
@@ -202,8 +203,8 @@ function daysUntil(on: string) {
 
 /** A recurring charge or payday that is due soon, as a small tile. The disc stands in
  * for a merchant logo: an initial on one of the chart colours, picked by name. */
-function UpcomingTile({ label, on, amount }: { label: string; on: string; amount: string }) {
-  const incoming = Number(amount) > 0;
+function UpcomingTile({ label, on, amount, direction }: Summary["upcoming"][number]) {
+  const incoming = direction > 0;
   const colour = SERIES[label.charCodeAt(0) % SERIES.length];
   return (
     <li className="w-28 shrink-0 overflow-hidden rounded-xl border border-line text-center">
@@ -218,7 +219,7 @@ function UpcomingTile({ label, on, amount }: { label: string; on: string; amount
       </div>
       <p className="mt-2 truncate px-2 text-[12px] text-muted">{label}</p>
       <p className={`tnum text-sm font-medium ${incoming ? "text-acid" : ""}`}>
-        {incoming ? `+${usd(amount)}` : usd(Math.abs(Number(amount)))}
+        {signedAmount({ amount, direction })}
       </p>
       <p className="label mt-2 border-t border-line py-1.5">{daysUntil(on)}</p>
     </li>
@@ -302,7 +303,7 @@ export function OverviewPage() {
             ) : (
               <ul className="mt-2 flex gap-3 overflow-x-auto pb-1">
                 {upcoming.slice(0, 8).map((u) => (
-                  <UpcomingTile key={u.id} label={u.label} on={u.on} amount={u.amount} />
+                  <UpcomingTile key={u.id} {...u} />
                 ))}
               </ul>
             )}

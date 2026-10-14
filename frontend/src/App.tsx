@@ -10,6 +10,7 @@ import { InvestmentsPage } from "./pages/InvestmentsPage";
 import { TransactionsPage } from "./pages/TransactionsPage";
 import { RecurringPage } from "./pages/RecurringPage";
 import { BudgetsPage } from "./pages/BudgetsPage";
+import { NetWorthPage } from "./pages/NetWorthPage";
 import { GoalsPage } from "./pages/GoalsPage";
 import { ReportsPage } from "./pages/ReportsPage";
 import { SettingsPage } from "./pages/SettingsPage";
@@ -109,6 +110,14 @@ export default function App() {
             element={
               <Protected>
                 <BudgetsPage />
+              </Protected>
+            }
+          />
+          <Route
+            path="/net-worth"
+            element={
+              <Protected>
+                <NetWorthPage />
               </Protected>
             }
           />

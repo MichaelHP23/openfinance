@@ -40,6 +40,11 @@ export const pctTone = (v: string | number) => (num(v) >= 0 ? "text-acid" : "tex
 
 export const signed = (v: string | number) => (num(v) > 0 ? `+${usd(v)}` : usd(v));
 
+/** For a recurring item, whose amount is a magnitude and whose direction says which way
+ * it goes: money in gets a plus, money out is a plain figure. */
+export const signedAmount = (u: { amount: string; direction: number }) =>
+  u.direction > 0 ? `+${usd(u.amount)}` : usd(u.amount);
+
 export const LIABILITY_TYPES = new Set(["credit_card", "loan", "liability"]);
 
 export function netWorth(accounts: Account[]) {

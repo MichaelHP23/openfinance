@@ -573,6 +573,8 @@ def test_summary_reports_upcoming_and_price_increase_counts(db, monkeypatch):
     assert s.price_increases == 1
     assert len(s.upcoming) == 1
     assert s.upcoming[0]["label"] == "Streaming Co"
+    # The amount is a magnitude; without the direction a bill and a payday look alike.
+    assert s.upcoming[0]["direction"] == -1
     assert s.last_detected_at is not None
 
 

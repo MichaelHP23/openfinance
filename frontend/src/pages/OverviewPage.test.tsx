@@ -42,7 +42,10 @@ function api(over: Record<string, unknown> = {}) {
       monthly_committed: "15.99",
       monthly_incoming: "0",
       active_count: 1,
-      upcoming: [{ id: "s1", label: "Netflix", on: `${month}-28`, amount: "-15.99" }],
+      upcoming: [
+        { id: "s1", label: "Netflix", on: `${month}-28`, amount: "15.99", direction: -1 },
+        { id: "s2", label: "Acme Payroll", on: `${month}-28`, amount: "3200.00", direction: 1 },
+      ],
       price_increases: 0,
       last_detected_at: null,
     },
@@ -112,9 +115,11 @@ test("shows the bills coming up", async () => {
   show();
   const card = (await screen.findByRole("heading", { name: "Upcoming" })).closest("section")!;
   expect(await within(card).findByText("Netflix")).toBeInTheDocument();
+  // A bill is a plain amount; only money coming in carries a plus.
   expect(within(card).getByText("$15.99")).toBeInTheDocument();
+  expect(within(card).getByText("+$3,200.00")).toBeInTheDocument();
   // Each tile says how far off it is, the way a calendar would not.
-  expect(within(card).getByText(/^(today|tomorrow|in \d+ days|overdue)$/i)).toBeInTheDocument();
+  expect(within(card).getAllByText(/^(today|tomorrow|in \d+ days|overdue)$/i)).toHaveLength(2);
 });
 
 test("recent activity marks an ignored transaction instead of hiding it", async () => {

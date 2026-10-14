@@ -475,7 +475,13 @@ def summary(db: Session, household_id: uuid.UUID) -> Summary:
         monthly_incoming=monthly_committed(active, direction=1),
         active_count=len(active),
         upcoming=[
-            {"id": s.id, "label": s.label, "on": s.next_expected_on, "amount": s.last_amount}
+            {
+                "id": s.id,
+                "label": s.label,
+                "on": s.next_expected_on,
+                "amount": s.last_amount,
+                "direction": s.direction,
+            }
             for s in upcoming
         ],
         price_increases=sum(1 for s in active if s.price_increase_amount is not None),
