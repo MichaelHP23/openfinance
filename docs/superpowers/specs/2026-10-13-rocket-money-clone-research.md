@@ -1,14 +1,14 @@
 # Rocket Money PC experience — research and clone plan
 
 **Date:** 2026-10-13
-**Status:** Research complete for everything reachable without an account. No code written from it yet.
+**Status:** Research complete for everything reachable without an account. §8 steps 1–3 (shell, dashboard, transactions) are built and live; 4–6 are not.
 **Why this exists:** three rounds of restyling did not make the app look like Rocket Money. The earlier spec (`2026-10-12-rocket-money-features-design.md`) inventoried *features* from public docs; nobody had looked at the *screens*. This document is the screens.
 
 ## 1. Tools: what was found, used, and blocked
 
 | Tool | Used | Notes |
 |---|---|---|
-| REA (`morluto/rea`, npm `rea-agents`) | **Blocked** | README read through the GitHub API. Running it (`npx rea-agents`) was refused by the session's permission guard as external code. Needs an explicit allow from the user. See §7 for what it would and would not add. |
+| REA (`morluto/rea`, npm `rea-agents` 6.4.0) | Yes, after the user approved it | `list-browser-targets`, `inspect-web-page`, `analyze-web-bundle` against a throwaway headless browser. Result: `app.rocketmoney.com` lands on `auth.rocketaccount.com/authorize` with no application code served; on `www.rocketmoney.com` it enumerated the public feature pages. Nothing about the logged-in app, as expected. Its native-analysis engines (Hopper, Ghidra, IDA) are not installed and not relevant to a website. |
 | Playwright (already in `frontend/`) | Yes | Followed `app.rocketmoney.com` to its login redirect; crawled the public help centre. Never submitted a login form. |
 | GitHub CLI | Yes | Read REA's README. |
 | Claude-in-Chrome extension | Available, unused | The route for observing a logged-in session, if the user logs in themselves and says to proceed. |
@@ -49,6 +49,7 @@ Quoted positions are theirs.
 - **Transactions list:** month header with "$2,398 total spend" at right; rows = coloured round category icon, merchant, "Jan 25 | Pending" plus small tag chips, amount at right.
 - **Transaction detail sheet:** lavender top with date, merchant, amount, a category pill; then rows Rename · Is Recurring? (toggle) · Is Tax Deductible? (toggle) · Ignore (dropdown "Don't Ignore") · Add Note · Create Rule · Split; an outlined **Delete** pill.
 - **Add a Transaction:** crimson top, Spend / Income segmented control, fields Name, Date, Amount, Category, a black full-width **Save** pill.
+- **Spending** (from `rocketmoney.com/feature/spending-insights`): crimson band holding a Week / Month / Quarter / Year segmented control and a row of per-period bars (income beside spending, the selected period outlined); below it a white card with rows Earnings, Total Spend, Net Income (green).
 - **Budget:** "Left for Spending $781", a row of round category icons each with a progress ring.
 - **Connection status card:** First Synced, Last Synced, Status (Healthy green / Temporary Issue amber / Delayed amber) with an ⓘ; outlined "Sync Account" pill, or a filled amber "Fix Connection".
 - **Settings menu:** a list of bordered rows — Refer a Friend, Chat, Leave Demo Mode, Profile, Share Account, Manage Budget, Categories Tags & Rules, Linked Accounts, Notifications & Alerts, App Appearance, Premium membership.
