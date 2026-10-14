@@ -316,7 +316,9 @@ def detect(db: Session, household_id: uuid.UUID) -> DetectionResult:
     txns = list(
         db.scalars(
             select(Transaction).where(
-                Transaction.household_id == household_id, Transaction.posted_at >= since
+                Transaction.household_id == household_id,
+                Transaction.posted_at >= since,
+                Transaction.ignored.is_(False),
             )
         )
     )
@@ -432,6 +434,14 @@ def update(
     for field, value in data.model_dump(exclude_unset=True).items():
         if field == "status" and value is not None:
             value = SeriesStatus(value)
+            # cancelled_on is the user's claim of when they cancelled; a later charge
+            # is what the still_billing alert reports. Set once — re-saving an already
+            # cancelled series must not move the date past the charge it should catch.
+            if value == SeriesStatus.cancelled:
+                if row.cancelled_on is None:
+                    row.cancelled_on = datetime.now(UTC).date()
+            else:
+                row.cancelled_on = None
         setattr(row, field, value)
     db.commit()
     db.refresh(row)

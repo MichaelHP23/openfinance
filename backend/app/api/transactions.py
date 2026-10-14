@@ -31,12 +31,20 @@ def list_txns(
     since: datetime | None = None,
     until: datetime | None = None,
     search: str | None = None,
+    tag: str | None = None,
     hid: uuid.UUID = Depends(require_household),
     db: Session = Depends(get_db),
 ) -> list[Transaction]:
     return transactions.list_for(
-        db, hid, account_id=account_id, since=since, until=until, search=search
+        db, hid, account_id=account_id, since=since, until=until, search=search, tag=tag
     )
+
+
+@router.get("/tags", response_model=list[str])
+def list_tags(
+    hid: uuid.UUID = Depends(require_household), db: Session = Depends(get_db)
+) -> list[str]:
+    return transactions.tags_in_use(db, hid)
 
 
 @router.patch("/{txn_id}", response_model=TxnOut)

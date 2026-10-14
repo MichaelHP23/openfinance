@@ -364,3 +364,58 @@ def goals_overview(
         )
         for g in goals.list_for(db, household_id)
     ]
+
+
+SAFE_TO_SPEND_FALLBACK_DAYS = 30
+
+
+@dataclass
+class SafeToSpend:
+    amount: Decimal
+    until: date | None  # the next payday; None when no income series is known
+    bills_due: int
+
+
+def safe_to_spend(
+    db: Session, household_id: uuid.UUID, *, today: date | None = None
+) -> SafeToSpend:
+    """What can leave the cash accounts before the next payday without going negative.
+
+    The lowest projected balance from today through the day before the next expected
+    income, floored at zero. It comes from `project()`, so recurring bills and the
+    month's budgeted discretionary spend are already taken out — this is money beyond
+    the plan, not the whole balance. With no income series there is no payday to aim
+    at, so the window is a flat SAFE_TO_SPEND_FALLBACK_DAYS and `until` is None.
+    """
+    today = today or datetime.now(UTC).date()
+    active = recurring.list_for(db, household_id, status=SeriesStatus.active)
+
+    paydays: list[date] = []
+    for s in active:
+        if s.direction <= 0:
+            continue
+        nxt = _first_occurrence_on_or_after(s, today)
+        # Income landing today is already in today's balance; the wait is for the next one.
+        if nxt == today:
+            nxt = _step_forward(nxt, s.cadence)
+        if nxt is not None:
+            paydays.append(nxt)
+    until = min(paydays, default=None)
+    end = until or today + timedelta(days=SAFE_TO_SPEND_FALLBACK_DAYS)  # exclusive
+
+    months = 1
+    while _add_months(today, months) < end:
+        months += 1
+    window = [d for d in project(db, household_id, months, today=today) if d.on < end]
+    lowest = min((d.projected_balance for d in window), default=Decimal(0))
+
+    bills_due = 0
+    for s in active:
+        if s.direction >= 0:
+            continue
+        cursor = _first_occurrence_on_or_after(s, today)
+        while cursor is not None and cursor < end:
+            bills_due += 1
+            cursor = _step_forward(cursor, s.cadence)
+
+    return SafeToSpend(amount=max(lowest, Decimal(0)), until=until, bills_due=bills_due)

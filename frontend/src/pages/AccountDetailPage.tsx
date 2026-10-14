@@ -3,7 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "../api/client";
 import { ACCOUNT_TYPES, type Account, type Txn, useAccounts } from "../data";
-import { LIABILITY_TYPES, prettyType, usd } from "../money";
+import { flowTotals, LIABILITY_TYPES, prettyType, usd } from "../money";
 import { TxnRows } from "../transactions";
 import { Card, Empty, PageHead } from "../ui/Shell";
 
@@ -49,8 +49,7 @@ export function AccountDetailPage() {
   }
 
   const isLiability = LIABILITY_TYPES.has(account.type);
-  const spent = txns.filter((t) => Number(t.amount) < 0).reduce((n, t) => n + -Number(t.amount), 0);
-  const received = txns.filter((t) => Number(t.amount) > 0).reduce((n, t) => n + Number(t.amount), 0);
+  const { outflow: spent, inflow: received } = flowTotals(txns);
 
   return (
     <>

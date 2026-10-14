@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { longDate, monthTotals, monthlySeries, netWorth, pct, topMerchants, units, usd } from "./money";
+import { flowTotals, longDate, monthTotals, monthlySeries, netWorth, pct, topMerchants, units, usd } from "./money";
 import type { Account, Txn } from "./data";
 
 const acct = (type: string, balance: string): Account => ({
@@ -12,13 +12,15 @@ const acct = (type: string, balance: string): Account => ({
   beneficiary: null,
 });
 
-const txn = (posted_at: string, amount: string, merchant_raw = "X"): Txn => ({
+const txn = (posted_at: string, amount: string, merchant_raw = "X", ignored = false): Txn => ({
   id: posted_at + amount + merchant_raw,
   posted_at,
   amount,
   merchant_raw,
   category_id: null,
   currency: "USD",
+  ignored,
+  tags: [],
 });
 
 describe("netWorth", () => {
@@ -47,6 +49,18 @@ describe("monthTotals", () => {
     ];
     expect(monthTotals(t, "2026-03")).toEqual({ inflow: 2000, outflow: 50, net: 1950 });
   });
+
+  it("leaves ignored transactions out of both sides", () => {
+    const t = [
+      txn("2026-03-01T00:00:00Z", "2000.00"),
+      txn("2026-03-02T00:00:00Z", "5000.00", "Own transfer", true),
+      txn("2026-03-05T00:00:00Z", "-50.00"),
+      txn("2026-03-06T00:00:00Z", "-900.00", "Sofa Barn", true),
+    ];
+    expect(monthTotals(t, "2026-03")).toEqual({ inflow: 2000, outflow: 50, net: 1950 });
+    expect(monthlySeries(t, 1, new Date(2026, 2, 15))[0].outflow).toBe(50);
+    expect(flowTotals(t)).toEqual({ inflow: 2000, outflow: 50, net: 1950 });
+  });
 });
 
 describe("monthlySeries", () => {
@@ -69,6 +83,14 @@ describe("topMerchants", () => {
       { merchant: "Cafe", total: 15 },
       { merchant: "Store", total: 12 },
     ]);
+  });
+
+  it("leaves ignored transactions out", () => {
+    const t = [
+      txn("2026-01-01T00:00:00Z", "-10.00", "Cafe"),
+      txn("2026-01-02T00:00:00Z", "-900.00", "Sofa Barn", true),
+    ];
+    expect(topMerchants(t, 5)).toEqual([{ merchant: "Cafe", total: 10 }]);
   });
 });
 

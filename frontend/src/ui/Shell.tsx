@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { NavLink } from "react-router-dom";
 import { apiFetch } from "../api/client";
+import { AlertBell } from "../AlertsCard";
 import { MoreMenu } from "./MoreMenu";
 import { OfflineBanner } from "./OfflineBanner";
 
@@ -35,11 +36,12 @@ export function Shell({ children, localMode }: { children: ReactNode; localMode:
 
   return (
     <div className="flex min-h-screen">
-      <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col justify-between border-r border-line px-5 py-7 md:flex">
+      <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col justify-between border-r border-line bg-surface px-5 py-7 md:flex">
         <div>
           <div className="mb-10 flex items-baseline gap-2">
             <span className="font-display text-3xl leading-none text-acid">O</span>
             <span className="text-sm font-medium tracking-[0.2em] uppercase">Finance</span>
+            <AlertBell />
           </div>
 
           <nav className="flex flex-col gap-1">
@@ -52,8 +54,8 @@ export function Shell({ children, localMode }: { children: ReactNode; localMode:
                   [
                     "relative rounded-lg px-3 py-2 text-sm transition-colors",
                     isActive
-                      ? "bg-[rgba(198,242,78,0.08)] text-bone"
-                      : "text-muted hover:bg-[rgba(237,234,228,0.04)] hover:text-bone",
+                      ? "bg-tint font-medium text-acid"
+                      : "text-muted hover:bg-hover hover:text-bone",
                   ].join(" ")
                 }
               >
@@ -86,9 +88,10 @@ export function Shell({ children, localMode }: { children: ReactNode; localMode:
 
       <div className="flex min-w-0 flex-1 flex-col">
         {/* The sidebar is desktop-only, so small screens get their own header… */}
-        <header className="flex items-baseline gap-2 border-b border-line px-5 py-4 md:hidden">
+        <header className="flex items-baseline gap-2 border-b border-line bg-surface px-5 py-4 md:hidden">
           <span className="font-display text-2xl leading-none text-acid">O</span>
           <span className="text-xs font-medium tracking-[0.2em] uppercase">Finance</span>
+          <AlertBell />
         </header>
 
         <main className="min-w-0 flex-1 px-5 py-6 pb-28 md:px-10 md:py-12 md:pb-12">
@@ -101,7 +104,7 @@ export function Shell({ children, localMode }: { children: ReactNode; localMode:
 
       {/* …and a thumb-reachable tab bar, clearing the iPhone home indicator. */}
       <nav
-        className="fixed inset-x-0 bottom-0 z-20 flex border-t border-line bg-ink/95 backdrop-blur md:hidden"
+        className="fixed inset-x-0 bottom-0 z-20 flex border-t border-line bg-surface/95 backdrop-blur md:hidden"
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
       >
         {NAV.map((n) => (

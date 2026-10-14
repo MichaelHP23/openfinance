@@ -30,3 +30,9 @@ class AffordOut(BaseModel):
     stays_non_negative: bool
     minimum_balance: Decimal
     goal_impact: list[GoalAffordabilityOut]
+
+
+class SafeToSpendOut(BaseModel):
+    amount: Decimal
+    until: date | None
+    bills_due: int

@@ -35,7 +35,7 @@ export function AccountList() {
       {data.map((a, i) => (
         <li
           key={a.id}
-          className="rise flex items-center gap-4 py-3.5 transition-colors first:pt-0 last:pb-0 hover:bg-[rgba(237,234,228,0.02)]"
+          className="rise flex items-center gap-4 py-3.5 transition-colors first:pt-0 last:pb-0 hover:bg-hover"
           style={{ "--d": `${i * 40}ms` } as React.CSSProperties}
         >
           <span className="tnum flex size-9 shrink-0 items-center justify-center rounded-lg border border-line bg-ink text-[11px] text-muted">

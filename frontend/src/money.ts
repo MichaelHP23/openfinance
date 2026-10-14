@@ -55,17 +55,22 @@ export function netWorth(accounts: Account[]) {
 
 const monthKey = (iso: string) => iso.slice(0, 7);
 
-export function monthTotals(txns: Txn[], key: string) {
+/** Money in and out across `txns`. An ignored transaction is in the list, not the sum —
+ * the backend's aggregates make the same cut. */
+export function flowTotals(txns: Txn[]) {
   let inflow = 0;
   let outflow = 0;
   for (const t of txns) {
-    if (monthKey(t.posted_at) !== key) continue;
+    if (t.ignored) continue;
     const amt = num(t.amount);
     if (amt >= 0) inflow += amt;
     else outflow += -amt;
   }
   return { inflow, outflow, net: inflow - outflow };
 }
+
+export const monthTotals = (txns: Txn[], key: string) =>
+  flowTotals(txns.filter((t) => monthKey(t.posted_at) === key));
 
 /** Last `count` months, oldest first, as {key, label, inflow, outflow}. */
 export function monthlySeries(txns: Txn[], count: number, today: Date) {
@@ -86,7 +91,7 @@ export function topMerchants(txns: Txn[], limit: number) {
   const totals = new Map<string, number>();
   for (const t of txns) {
     const amt = num(t.amount);
-    if (amt >= 0) continue;
+    if (amt >= 0 || t.ignored) continue;
     totals.set(t.merchant_raw, (totals.get(t.merchant_raw) ?? 0) + -amt);
   }
   return [...totals.entries()]

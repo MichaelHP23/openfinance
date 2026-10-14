@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.models.transaction import Transaction
@@ -62,6 +62,7 @@ def list_for(
     since: datetime | None = None,
     until: datetime | None = None,
     search: str | None = None,
+    tag: str | None = None,
 ) -> list[Transaction]:
     q = select(Transaction).where(Transaction.household_id == household_id)
     if account_id:
@@ -72,7 +73,19 @@ def list_for(
         q = q.where(Transaction.posted_at <= until)
     if search:
         q = q.where(Transaction.merchant_raw.ilike(f"%{search}%"))
+    if tag:
+        q = q.where(Transaction.tags.contains([tag.strip().lower()]))
     return list(db.scalars(q.order_by(Transaction.posted_at.desc())))
+
+
+def tags_in_use(db: Session, household_id: uuid.UUID) -> list[str]:
+    """Distinct tags across the household's transactions, for autocomplete."""
+    tag = func.unnest(Transaction.tags).label("tag")
+    return list(
+        db.scalars(
+            select(tag).where(Transaction.household_id == household_id).distinct().order_by(tag)
+        )
+    )
 
 
 def get(db: Session, household_id: uuid.UUID, txn_id: uuid.UUID) -> Transaction | None:

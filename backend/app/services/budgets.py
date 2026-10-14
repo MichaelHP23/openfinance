@@ -154,6 +154,7 @@ def _actuals_for_month(
         .where(
             Transaction.household_id == household_id,
             Transaction.category_id.is_not(None),
+            Transaction.ignored.is_(False),
             Transaction.posted_at >= start,
             Transaction.posted_at < end,
         )

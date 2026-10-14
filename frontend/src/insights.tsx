@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiFetch } from "./api/client";
 import type { NetWorthPoint } from "./data";
@@ -37,7 +37,10 @@ type TraceEntry = { tool: string; args: Record<string, unknown>; result_summary:
 type AskResponse = { answer: string; trace: TraceEntry[]; model: string };
 type Turn = { question: string; answer: string; trace: TraceEntry[] };
 
-export function Assistant() {
+/** `prompt` is a question asked from elsewhere on the page ("Ask advisor" on an alert).
+ * A new object asks again, so the same alert can be asked about twice. */
+export function Assistant({ prompt }: { prompt?: { question: string } }) {
+  const card = useRef<HTMLDivElement>(null);
   const [question, setQuestion] = useState("");
   const [turns, setTurns] = useState<Turn[]>([]);
   const { data: availability } = useQuery({
@@ -57,67 +60,76 @@ export function Assistant() {
     },
   });
 
+  const { mutate } = ask;
+  useEffect(() => {
+    if (!prompt) return;
+    mutate(prompt.question);
+    card.current?.scrollIntoView?.({ behavior: "smooth", block: "nearest" });
+  }, [prompt, mutate]);
+
   if (!availability?.available) return null;
 
   return (
-    <Card className="mt-4" delay={300}>
-      <div className="mb-3 flex items-baseline justify-between gap-3">
-        <h2 className="text-sm font-medium">What's up with my money</h2>
-        <span className="label">Reads only your own data</span>
-      </div>
+    <div ref={card}>
+      <Card className="mt-4" delay={300}>
+        <div className="mb-3 flex items-baseline justify-between gap-3">
+          <h2 className="text-sm font-medium">What's up with my money</h2>
+          <span className="label">Reads only your own data</span>
+        </div>
 
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          ask.mutate(question);
-        }}
-        className="flex flex-wrap items-end gap-3"
-      >
-        <input
-          className="min-w-0 flex-1"
-          placeholder="Optional: ask something specific…"
-          aria-label="Question"
-          value={question}
-          onChange={(e) => setQuestion(e.target.value)}
-        />
-        <button disabled={ask.isPending} className="btn">
-          {ask.isPending ? "Thinking…" : "Ask"}
-        </button>
-      </form>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            ask.mutate(question);
+          }}
+          className="flex flex-wrap items-end gap-3"
+        >
+          <input
+            className="min-w-0 flex-1"
+            placeholder="Optional: ask something specific…"
+            aria-label="Question"
+            value={question}
+            onChange={(e) => setQuestion(e.target.value)}
+          />
+          <button disabled={ask.isPending} className="btn">
+            {ask.isPending ? "Thinking…" : "Ask"}
+          </button>
+        </form>
 
-      {ask.isError && (
-        <p className="mt-3 rounded-lg border border-clay/40 bg-clay/10 px-3 py-2 text-sm text-clay">
-          {(ask.error as Error).message}
-        </p>
-      )}
+        {ask.isError && (
+          <p className="mt-3 rounded-lg border border-clay/40 bg-clay/10 px-3 py-2 text-sm text-clay">
+            {(ask.error as Error).message}
+          </p>
+        )}
 
-      <div className="flex flex-col">
-        {turns.map((turn, i) => (
-          <div key={i} className={i > 0 ? "mt-4 border-t border-line pt-4" : ""}>
-            {turn.question && <p className="mt-4 text-sm font-medium text-bone">{turn.question}</p>}
-            <Markdown text={turn.answer} />
-            {turn.trace.length > 0 && (
-              <details className="mt-2">
-                <summary className="cursor-pointer text-[11px] text-muted">
-                  {turn.trace.length} tool call{turn.trace.length === 1 ? "" : "s"}
-                </summary>
-                <ul className="mt-2 flex flex-col gap-1.5 text-[11px] text-muted">
-                  {turn.trace.map((t, j) => (
-                    <li key={j}>
-                      <span className="text-bone">{t.tool}</span>
-                      {"("}
-                      {JSON.stringify(t.args)}
-                      {") → "}
-                      {t.result_summary}
-                    </li>
-                  ))}
-                </ul>
-              </details>
-            )}
-          </div>
-        ))}
-      </div>
-    </Card>
+        <div className="flex flex-col">
+          {turns.map((turn, i) => (
+            <div key={i} className={i > 0 ? "mt-4 border-t border-line pt-4" : ""}>
+              {turn.question && <p className="mt-4 text-sm font-medium text-bone">{turn.question}</p>}
+              <Markdown text={turn.answer} />
+              {turn.trace.length > 0 && (
+                <details className="mt-2">
+                  <summary className="cursor-pointer text-[11px] text-muted">
+                    {turn.trace.length} tool call{turn.trace.length === 1 ? "" : "s"}
+                  </summary>
+                  <ul className="mt-2 flex flex-col gap-1.5 text-[11px] text-muted">
+                    {turn.trace.map((t, j) => (
+                      <li key={j}>
+                        <span className="text-bone">{t.tool}</span>
+                        {"("}
+                        {JSON.stringify(t.args)}
+                        {") → "}
+                        {t.result_summary}
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              )}
+            </div>
+          ))}
+        </div>
+      </Card>
+    </div>
   );
 }
 

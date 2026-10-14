@@ -21,7 +21,7 @@ export function OfflineBanner() {
   return (
     <p
       role="status"
-      className="mb-4 rounded-lg border border-line bg-[rgba(232,120,90,0.08)] px-3 py-2 text-[13px] text-clay"
+      className="mb-4 rounded-lg border border-line bg-clay/10 px-3 py-2 text-[13px] text-clay"
     >
       Offline — showing cached data as of {fmtTime(since)}.
     </p>

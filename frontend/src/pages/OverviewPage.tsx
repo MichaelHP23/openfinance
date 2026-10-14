@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useAccounts, useNetWorthHistory, useTransactions } from "../data";
 import { TxnRows } from "../transactions";
@@ -5,6 +6,8 @@ import { monthlySeries, monthTotals, netWorth, topMerchants, usd, usdCompact } f
 import { Assistant, NetWorthChart } from "../insights";
 import { Card, Empty, PageHead } from "../ui/Shell";
 import { ForecastChart } from "../ForecastChart";
+import { AlertsCard } from "../AlertsCard";
+import { SafeToSpendCard } from "../SafeToSpendCard";
 
 const NOW = new Date();
 const THIS_MONTH = `${NOW.getFullYear()}-${String(NOW.getMonth() + 1).padStart(2, "0")}`;
@@ -22,6 +25,8 @@ export function OverviewPage() {
   const { data: accounts = [] } = useAccounts();
   const { data: txns = [] } = useTransactions();
   const { data: history = [] } = useNetWorthHistory(90);
+  // A question an alert's "Ask advisor" hands to the assistant card further down.
+  const [prompt, setPrompt] = useState<{ question: string }>();
 
   const { assets, debts, net } = netWorth(accounts);
   const month = monthTotals(txns, THIS_MONTH);
@@ -36,6 +41,10 @@ export function OverviewPage() {
         title="Overview"
         sub={NOW.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
       />
+
+      <AlertsCard onAsk={(question) => setPrompt({ question })} />
+      {/* An empty install has no cash to reason about; "$0 — nothing spare" would be noise. */}
+      {accounts.length > 0 && <SafeToSpendCard />}
 
       <section className="rise mb-10" style={{ "--d": "60ms" } as React.CSSProperties}>
         <p className="label">Net worth</p>
@@ -94,7 +103,7 @@ export function OverviewPage() {
                       />
                       <div
                         title={`Out ${usd(m.outflow)}`}
-                        className="w-1/2 rounded-t-sm bg-[#3c3c44] transition-all"
+                        className="w-1/2 rounded-t-sm bg-out transition-all"
                         style={{ height: `${(m.outflow / peak) * 100}%` }}
                       />
                     </div>
@@ -107,7 +116,7 @@ export function OverviewPage() {
                   <span className="size-2 rounded-full bg-acid" /> in
                 </span>
                 <span className="flex items-center gap-1.5">
-                  <span className="size-2 rounded-full bg-[#3c3c44]" /> out
+                  <span className="size-2 rounded-full bg-out" /> out
                 </span>
                 <span className="ml-auto tnum">peak {usdCompact(peak)}</span>
               </p>
@@ -127,7 +136,7 @@ export function OverviewPage() {
                     <span className="truncate">{m.merchant}</span>
                     <span className="tnum text-muted">{usd(m.total)}</span>
                   </div>
-                  <div className="h-1.5 overflow-hidden rounded-full bg-[#26262c]">
+                  <div className="h-1.5 overflow-hidden rounded-full bg-track">
                     <div
                       className="h-full rounded-full bg-acid/70"
                       style={{ width: `${(m.total / merchantPeak) * 100}%` }}
@@ -160,7 +169,7 @@ export function OverviewPage() {
         )}
       </Card>
 
-      <Assistant />
+      <Assistant prompt={prompt} />
     </>
   );
 }

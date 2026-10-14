@@ -366,3 +366,62 @@ def test_goals_overview_pairs_progress_with_projected_date_for_every_goal(db, ho
     row = next(o for o in overview if o.goal_id == goal.id)
     assert row.progress == Decimal("500.00")
     assert row.projected_date == date(2026, 9, 1)  # remaining 500 / 250 per month = 2 months
+
+
+# --- safe_to_spend (P10) --------------------------------------------------------------
+
+STS_TODAY = date(2026, 10, 12)
+
+
+def test_safe_to_spend_with_no_income_series_uses_a_thirty_day_window(db, household, account):
+    _series(db, household, account, label="Soon", cadence=Cadence.yearly, direction=-1,
+            typical_amount=Decimal("100.00"), next_expected_on=STS_TODAY + timedelta(days=20))
+    _series(db, household, account, label="Later", cadence=Cadence.yearly, direction=-1,
+            typical_amount=Decimal("100.00"), next_expected_on=STS_TODAY + timedelta(days=40))
+    result = forecast.safe_to_spend(db, household.id, today=STS_TODAY)
+    assert result.until is None
+    assert result.amount == Decimal("1100.00")
+    assert result.bills_due == 1
+
+
+def test_safe_to_spend_is_the_lowest_balance_before_the_next_payday(db, household, account):
+    _series(db, household, account, label="Paycheck", cadence=Cadence.monthly, direction=1,
+            typical_amount=Decimal("2000.00"), next_expected_on=STS_TODAY + timedelta(days=10))
+    _series(db, household, account, label="Rent", cadence=Cadence.monthly, direction=-1,
+            typical_amount=Decimal("900.00"), next_expected_on=STS_TODAY + timedelta(days=5))
+    result = forecast.safe_to_spend(db, household.id, today=STS_TODAY)
+    assert result.until == STS_TODAY + timedelta(days=10)
+    assert result.amount == Decimal("300.00")
+    assert result.bills_due == 1
+
+
+def test_safe_to_spend_ignores_bills_that_land_after_payday(db, household, account):
+    _series(db, household, account, label="Paycheck", cadence=Cadence.monthly, direction=1,
+            typical_amount=Decimal("2000.00"), next_expected_on=STS_TODAY + timedelta(days=10))
+    _series(db, household, account, label="Rent", cadence=Cadence.monthly, direction=-1,
+            typical_amount=Decimal("900.00"), next_expected_on=STS_TODAY + timedelta(days=12))
+    result = forecast.safe_to_spend(db, household.id, today=STS_TODAY)
+    assert result.amount == Decimal("1200.00")
+    assert result.bills_due == 0
+
+
+def test_safe_to_spend_is_zero_not_negative_when_bills_outrun_cash(db, household, account):
+    _series(db, household, account, label="Paycheck", cadence=Cadence.monthly, direction=1,
+            typical_amount=Decimal("2000.00"), next_expected_on=STS_TODAY + timedelta(days=10))
+    _series(db, household, account, label="Rent", cadence=Cadence.monthly, direction=-1,
+            typical_amount=Decimal("1500.00"), next_expected_on=STS_TODAY + timedelta(days=2))
+    assert forecast.safe_to_spend(db, household.id, today=STS_TODAY).amount == Decimal(0)
+
+
+def test_safe_to_spend_on_payday_itself_looks_to_the_following_payday(db, household, account):
+    _series(db, household, account, label="Paycheck", cadence=Cadence.monthly, direction=1,
+            typical_amount=Decimal("2000.00"), next_expected_on=STS_TODAY)
+    result = forecast.safe_to_spend(db, household.id, today=STS_TODAY)
+    assert result.until == date(2026, 11, 12)
+    assert result.amount == Decimal("3200.00")
+
+
+def test_safe_to_spend_rolls_a_stale_payday_forward(db, household, account):
+    _series(db, household, account, label="Paycheck", cadence=Cadence.biweekly, direction=1,
+            typical_amount=Decimal("1000.00"), next_expected_on=STS_TODAY - timedelta(days=21))
+    assert forecast.safe_to_spend(db, household.id, today=STS_TODAY).until == STS_TODAY + timedelta(days=7)

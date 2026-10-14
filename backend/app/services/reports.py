@@ -66,6 +66,7 @@ def spending(
                 Transaction.posted_at >= since,
                 Transaction.posted_at <= until,
                 Transaction.amount < 0,
+                Transaction.ignored.is_(False),
             )
         )
     )
@@ -135,7 +136,9 @@ def income_vs_expense(db: Session, household_id: uuid.UUID, months: int = 12) ->
     txns = list(
         db.scalars(
             select(Transaction).where(
-                Transaction.household_id == household_id, Transaction.posted_at >= since
+                Transaction.household_id == household_id,
+                Transaction.posted_at >= since,
+                Transaction.ignored.is_(False),
             )
         )
     )
@@ -207,6 +210,7 @@ def year_in_review(db: Session, household_id: uuid.UUID, year: int) -> YearInRev
                 Transaction.household_id == household_id,
                 Transaction.posted_at >= since,
                 Transaction.posted_at < until,
+                Transaction.ignored.is_(False),
             )
         )
     )

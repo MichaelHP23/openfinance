@@ -109,4 +109,20 @@ describe("Assistant", () => {
     // now appears twice — once per turn — rather than being replaced.
     expect(screen.getAllByText(/Net worth is up/)).toHaveLength(2);
   });
+
+  it("asks a question handed to it from elsewhere on the page, without a click", async () => {
+    vi.mocked(apiFetch).mockImplementation(async (path: string) => {
+      if (path === "/insights/available") return { available: true };
+      return { answer: "Cancel or downgrade.", trace: [], model: "m" };
+    });
+    const { rerender } = render(<Assistant />, { wrapper });
+    await screen.findByLabelText("Question");
+    rerender(<Assistant prompt={{ question: "Netflix went up. What are my options?" }} />);
+    expect(await screen.findByText("Cancel or downgrade.")).toBeInTheDocument();
+    expect(screen.getByText("Netflix went up. What are my options?")).toBeInTheDocument();
+    expect(apiFetch).toHaveBeenCalledWith("/insights/ask", {
+      method: "POST",
+      body: JSON.stringify({ question: "Netflix went up. What are my options?" }),
+    });
+  });
 });

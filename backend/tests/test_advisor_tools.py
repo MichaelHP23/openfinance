@@ -261,8 +261,11 @@ def test_goal_progress_reports_every_active_goal(db, household, account):
     assert result["goals"][0]["progress"] == 1500.0
 
 
-def test_registry_matches_the_allowlist_with_all_eight_tools():
+def test_registry_matches_the_allowlist_with_all_eleven_tools():
     assert set(advisor_tools._REGISTRY.keys()) == {
+        "alerts",
+        "safe_to_spend",
+        "can_i_afford",
         "net_worth_history",
         "holdings_summary",
         "recurring_list",
@@ -272,3 +275,57 @@ def test_registry_matches_the_allowlist_with_all_eight_tools():
         "cashflow_forecast",
         "goal_progress",
     }
+
+
+# --- P13: alerts, safe_to_spend, can_i_afford ----------------------------------------
+
+from datetime import timedelta
+
+from app.services import alerts as alerts_service
+
+
+def test_alerts_tool_returns_what_the_alerts_card_shows(db, household, account):
+    _txn(db, household, account, "Sofa Barn", "-900.00", on=datetime.now(UTC).date().isoformat())
+    result = advisor_tools.run_tool("alerts", {}, db, household.id)
+    assert [(a["kind"], a["severity"], a["title"]) for a in result["alerts"]] == [
+        ("large_charge", "info", "Large charge from Sofa Barn")
+    ]
+    assert "$900.00" in result["alerts"][0]["body"]
+
+
+def test_alerts_tool_leaves_out_dismissed_alerts(db, household, account):
+    _txn(db, household, account, "Sofa Barn", "-900.00", on=datetime.now(UTC).date().isoformat())
+    alerts_service.dismiss(db, household.id, alerts_service.list_for(db, household.id)[0].key)
+    assert advisor_tools.run_tool("alerts", {}, db, household.id) == {"alerts": []}
+
+
+def test_safe_to_spend_tool_reports_the_forecast_engines_number(db, household, account):
+    result = advisor_tools.run_tool("safe_to_spend", {}, db, household.id)
+    assert result == {"amount": 1500.0, "until": None, "bills_due": 0}
+
+
+def test_can_i_afford_says_no_when_the_purchase_takes_cash_negative(db, household, account):
+    on = (datetime.now(UTC).date() + timedelta(days=10)).isoformat()
+    result = advisor_tools.run_tool("can_i_afford", {"amount": "2000", "on_date": on}, db, household.id)
+    assert result["stays_non_negative"] is False
+    assert result["minimum_balance"] == -500.0
+
+
+def test_can_i_afford_says_yes_when_cash_covers_it(db, household, account):
+    on = (datetime.now(UTC).date() + timedelta(days=10)).isoformat()
+    result = advisor_tools.run_tool("can_i_afford", {"amount": "100", "on_date": on}, db, household.id)
+    assert result["stays_non_negative"] is True
+    assert result["minimum_balance"] == 1400.0
+
+
+def test_can_i_afford_reports_a_date_outside_the_horizon_as_an_error(db, household, account):
+    result = advisor_tools.run_tool(
+        "can_i_afford", {"amount": "100", "on_date": "2020-01-01"}, db, household.id
+    )
+    assert "on_date must be between" in result["error"]
+
+
+def test_can_i_afford_rejects_a_non_positive_amount(db, household, account):
+    on = datetime.now(UTC).date().isoformat()
+    result = advisor_tools.run_tool("can_i_afford", {"amount": "0", "on_date": on}, db, household.id)
+    assert "invalid arguments" in result["error"]

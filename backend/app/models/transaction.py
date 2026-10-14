@@ -2,8 +2,8 @@ import uuid
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import DateTime, ForeignKey, Numeric, String
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import DateTime, ForeignKey, Numeric, String, Text, false
+from sqlalchemy.dialects.postgresql import ARRAY, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, TimestampMixin, UUIDMixin
@@ -27,3 +27,8 @@ class Transaction(Base, UUIDMixin, TimestampMixin):
     )
     notes: Mapped[str | None] = mapped_column(nullable=True)
     external_id: Mapped[str | None] = mapped_column(nullable=True, index=True)
+    # Stays in the list and in its account's balance; left out of every spending
+    # aggregate. Each query that sums transactions filters on this itself.
+    ignored: Mapped[bool] = mapped_column(default=False, server_default=false())
+    # Free-text labels. No tag table: the known tags are the distinct set in use.
+    tags: Mapped[list[str]] = mapped_column(ARRAY(Text), default=list, server_default="{}")

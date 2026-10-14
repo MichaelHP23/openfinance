@@ -17,7 +17,7 @@ function GoalRing({ percent }: { percent: number }) {
         cy={32}
         r={r}
         fill="none"
-        stroke="#c6f24e"
+        stroke="var(--color-acid)"
         strokeWidth={6}
         strokeDasharray={circumference}
         strokeDashoffset={offset}

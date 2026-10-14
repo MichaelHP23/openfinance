@@ -82,3 +82,12 @@ def test_afford_endpoint_rejects_an_on_date_beyond_the_forecast_horizon_with_422
         "/forecast/afford", json={"amount": "200.00", "on_date": beyond, "months": 1}
     )
     assert res.status_code == 422
+
+
+def test_safe_to_spend_endpoint_returns_amount_window_and_bill_count(client, account):
+    res = client.get("/forecast/safe-to-spend")
+    assert res.status_code == 200
+    body = res.json()
+    assert Decimal(body["amount"]) == Decimal("1000.00")
+    assert body["until"] is None
+    assert body["bills_due"] == 0

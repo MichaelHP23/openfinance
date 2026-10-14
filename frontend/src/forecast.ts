@@ -37,3 +37,12 @@ export function useAfford() {
 export function firstNegativeDay(days: ForecastDay[]): ForecastDay | null {
   return days.find((d) => Number(d.projected_balance) < 0) ?? null;
 }
+
+export type SafeToSpend = { amount: string; until: string | null; bills_due: number };
+
+export function useSafeToSpend() {
+  return useQuery({
+    queryKey: ["forecast", "safe-to-spend"],
+    queryFn: () => apiFetch<SafeToSpend>("/forecast/safe-to-spend"),
+  });
+}
