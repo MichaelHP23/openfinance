@@ -65,8 +65,8 @@ function SubTabs() {
             [
               "shrink-0 rounded-lg px-3 py-2 text-sm whitespace-nowrap transition-colors",
               isActive
-                ? "bg-[rgba(198,242,78,0.08)] text-bone"
-                : "text-muted hover:bg-[rgba(237,234,228,0.04)] hover:text-bone",
+                ? "bg-tint text-bone"
+                : "text-muted hover:bg-hover hover:text-bone",
             ].join(" ")
           }
         >

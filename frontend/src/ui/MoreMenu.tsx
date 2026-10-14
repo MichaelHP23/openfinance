@@ -56,7 +56,7 @@ export function MoreMenu({ items }: { items: NavEntry[] }) {
       {open && (
         <div
           role="menu"
-          className="absolute right-0 bottom-full mb-2 w-48 rounded-lg border border-line bg-ink shadow-lg"
+          className="absolute right-0 bottom-full mb-2 w-48 rounded-lg border border-line bg-surface shadow-lg"
         >
           {items.map((item) => (
             <NavLink

@@ -103,7 +103,7 @@ export function OverviewPage() {
                       />
                       <div
                         title={`Out ${usd(m.outflow)}`}
-                        className="w-1/2 rounded-t-sm bg-[#3c3c44] transition-all"
+                        className="w-1/2 rounded-t-sm bg-out transition-all"
                         style={{ height: `${(m.outflow / peak) * 100}%` }}
                       />
                     </div>
@@ -116,7 +116,7 @@ export function OverviewPage() {
                   <span className="size-2 rounded-full bg-acid" /> in
                 </span>
                 <span className="flex items-center gap-1.5">
-                  <span className="size-2 rounded-full bg-[#3c3c44]" /> out
+                  <span className="size-2 rounded-full bg-out" /> out
                 </span>
                 <span className="ml-auto tnum">peak {usdCompact(peak)}</span>
               </p>
@@ -136,7 +136,7 @@ export function OverviewPage() {
                     <span className="truncate">{m.merchant}</span>
                     <span className="tnum text-muted">{usd(m.total)}</span>
                   </div>
-                  <div className="h-1.5 overflow-hidden rounded-full bg-[#26262c]">
+                  <div className="h-1.5 overflow-hidden rounded-full bg-track">
                     <div
                       className="h-full rounded-full bg-acid/70"
                       style={{ width: `${(m.total / merchantPeak) * 100}%` }}

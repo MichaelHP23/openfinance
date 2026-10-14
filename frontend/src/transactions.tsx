@@ -65,7 +65,7 @@ function TxnRow({ txn, index }: { txn: Txn; index: number }) {
   return (
     <>
       <tr
-        className="rise transition-colors hover:bg-[rgba(237,234,228,0.02)]"
+        className="rise transition-colors hover:bg-hover"
         style={{ "--d": `${Math.min(index, 12) * 30}ms` } as React.CSSProperties}
       >
         <td className={`tnum w-24 py-3 text-[13px] text-muted ${dim}`}>

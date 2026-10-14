@@ -120,7 +120,7 @@ function TwoFACard() {
           <p className="text-sm text-muted">
             Add this to your authenticator app, then enter a code to confirm:
           </p>
-          <code className="break-all rounded-lg border border-line bg-[rgba(237,234,228,0.04)] p-2 text-xs">
+          <code className="break-all rounded-lg border border-line bg-hover p-2 text-xs">
             {enroll.data.provisioning_uri}
           </code>
           <form onSubmit={handleSubmit(onVerify)} className="flex gap-2">

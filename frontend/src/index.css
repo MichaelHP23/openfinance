@@ -1,7 +1,5 @@
 @import "tailwindcss";
 
-@import "@fontsource/instrument-serif/400.css";
-@import "@fontsource/instrument-serif/400-italic.css";
 @import "@fontsource/ibm-plex-sans/400.css";
 @import "@fontsource/ibm-plex-sans/500.css";
 @import "@fontsource/ibm-plex-sans/600.css";
@@ -9,25 +7,33 @@
 @import "@fontsource/ibm-plex-mono/500.css";
 
 @theme {
-  --font-display: "Instrument Serif", Georgia, serif;
+  --font-display: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
   --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, monospace;
 
-  /* Warm ink, bone type, one acid accent. */
-  --color-ink: #0b0b0c;
-  --color-ink-2: #111114;
-  --color-surface: #17171a;
-  --color-surface-2: #1e1e22;
-  --color-line: #2a2a30;
-  --color-bone: #edeae4;
-  --color-muted: #8a8780;
-  --color-acid: #c6f24e;
-  --color-clay: #e8785a;
+  /* Light: a cool grey page, white cards, navy type, one green accent.
+     The names are from the dark theme this replaced and now describe roles, not
+     colours: ink = page, ink-2 = field, bone = text, acid = accent and money in,
+     clay = money out and warnings. Renaming them is a 60-file diff for no behaviour. */
+  --color-ink: #f3f5f8;
+  --color-ink-2: #ffffff;
+  --color-surface: #ffffff;
+  --color-surface-2: #f3f5f8;
+  --color-line: #e2e6ec;
+  --color-bone: #131a2b;
+  --color-muted: #647084;
+  --color-acid: #08795a;
+  --color-clay: #c93a2a;
+  /* Washes that used to be hard-coded rgba() in components. */
+  --color-tint: #e6f4ee; /* selected nav item, selected tab */
+  --color-hover: #f3f5f8; /* row and ghost-button hover */
+  --color-track: #e9ecf1; /* empty part of a progress bar */
+  --color-out: #b6bfcc; /* "money out" bars beside the accent "in" bars */
 }
 
 @layer base {
   html {
-    color-scheme: dark;
+    color-scheme: light;
   }
 
   body {
@@ -35,18 +41,18 @@
     color: var(--color-bone);
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
-    /* Warm glow bleeding from the top-left, so the page isn't a flat black rectangle. */
-    background-image:
-      radial-gradient(70rem 40rem at -10% -15%, rgba(198, 242, 78, 0.07), transparent 60%),
-      radial-gradient(50rem 40rem at 110% 0%, rgba(232, 120, 90, 0.05), transparent 55%);
-    background-attachment: fixed;
+  }
+
+  /* The display face is now the body face, so headings get their presence from weight. */
+  .font-display {
+    font-weight: 600;
+    letter-spacing: -0.03em;
   }
 
   /* Money never reflows when a digit changes. */
   .tnum {
-    font-family: var(--font-mono);
     font-variant-numeric: tabular-nums;
-    letter-spacing: -0.02em;
+    letter-spacing: -0.01em;
   }
 
   input,
@@ -61,14 +67,14 @@
   }
 
   input::placeholder {
-    color: #6c6a65;
+    color: #98a2b3;
   }
 
   input:focus,
   select:focus {
     outline: none;
     border-color: var(--color-acid);
-    box-shadow: 0 0 0 3px rgba(198, 242, 78, 0.13);
+    box-shadow: 0 0 0 3px rgba(8, 121, 90, 0.16);
   }
 
   input[type="file"] {
@@ -78,16 +84,18 @@
   }
 
   ::-webkit-calendar-picker-indicator {
-    filter: invert(0.8);
     cursor: pointer;
   }
 }
 
 @layer components {
   .card {
-    background: linear-gradient(180deg, var(--color-surface), var(--color-ink-2));
+    background: var(--color-surface);
     border: 1px solid var(--color-line);
-    border-radius: 0.875rem;
+    border-radius: 1rem;
+    box-shadow:
+      0 1px 2px rgba(19, 26, 43, 0.04),
+      0 10px 24px -16px rgba(19, 26, 43, 0.18);
   }
 
   .label {
@@ -99,10 +107,10 @@
 
   .btn {
     background-color: var(--color-acid);
-    color: #10130a;
+    color: #ffffff;
     font-weight: 600;
     font-size: 0.875rem;
-    border-radius: 0.5rem;
+    border-radius: 999px;
     padding: 0.55rem 1.1rem;
     transition: transform 0.12s ease, filter 0.15s ease;
     cursor: pointer;
@@ -133,8 +141,8 @@
   }
 
   .btn-ghost:hover {
-    border-color: #4a4a52;
-    background: rgba(237, 234, 228, 0.04);
+    border-color: #c5ccd6;
+    background: var(--color-hover);
   }
 
   /* Staggered entrance: set --d per element. */

@@ -19,7 +19,7 @@ function useWidth<T extends HTMLElement>() {
 function Tooltip({ x, children }: { x: number; children: React.ReactNode }) {
   return (
     <div
-      className="pointer-events-none absolute -top-1 z-10 -translate-x-1/2 -translate-y-full rounded-lg border border-line bg-ink px-2.5 py-1.5 text-[11px] whitespace-nowrap shadow-lg"
+      className="pointer-events-none absolute -top-1 z-10 -translate-x-1/2 -translate-y-full rounded-lg border border-line bg-surface px-2.5 py-1.5 text-[11px] whitespace-nowrap shadow-lg"
       style={{ left: x }}
     >
       {children}
@@ -100,7 +100,7 @@ export function AreaChart({
                 stroke="var(--color-line)"
               />
               {/* Surface ring keeps the marker legible over the fill. */}
-              <circle cx={x(hover!)} cy={y(active.value)} r="5" fill="var(--color-ink)" />
+              <circle cx={x(hover!)} cy={y(active.value)} r="5" fill="var(--color-surface)" />
               <circle cx={x(hover!)} cy={y(active.value)} r="4" fill={color} />
             </>
           )}

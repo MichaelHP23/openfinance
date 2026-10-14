@@ -17,9 +17,9 @@ const DOT: Record<AlertSeverity, string> = {
 function AlertRow({ alert, onAsk }: { alert: Alert; onAsk?: (question: string) => void }) {
   const dismiss = useDismissAlert();
   return (
-    <li className="flex items-start gap-3 border-b border-line py-3 last:border-0">
+    <li className="flex flex-wrap items-start gap-x-3 border-b border-line py-3 last:border-0">
       <span aria-hidden className={`mt-1.5 size-2 shrink-0 rounded-full ${DOT[alert.severity]}`} />
-      <div className="min-w-0 flex-1">
+      <div className="min-w-0 flex-1 basis-48">
         <span className="sr-only">{alert.severity}: </span>
         <Link to={alert.href} className="text-sm font-medium hover:text-acid">
           {alert.title}
@@ -29,25 +29,27 @@ function AlertRow({ alert, onAsk }: { alert: Alert; onAsk?: (question: string) =
           <p className="text-xs text-clay">{(dismiss.error as Error).message}</p>
         )}
       </div>
-      {onAsk && (
+      <div className="ml-5 flex shrink-0">
+        {onAsk && (
+          <button
+            type="button"
+            aria-label={`Ask advisor about ${alert.title}`}
+            onClick={() => onAsk(questionFor(alert))}
+            className="label px-2 py-1 transition-colors hover:text-bone"
+          >
+            Ask advisor
+          </button>
+        )}
         <button
           type="button"
-          aria-label={`Ask advisor about ${alert.title}`}
-          onClick={() => onAsk(questionFor(alert))}
-          className="label px-2 py-1 transition-colors hover:text-bone"
+          aria-label={`Dismiss ${alert.title}`}
+          disabled={dismiss.isPending}
+          onClick={() => dismiss.mutate(alert.key)}
+          className="label px-2 py-1 transition-colors hover:text-bone disabled:opacity-50"
         >
-          Ask advisor
+          Dismiss
         </button>
-      )}
-      <button
-        type="button"
-        aria-label={`Dismiss ${alert.title}`}
-        disabled={dismiss.isPending}
-        onClick={() => dismiss.mutate(alert.key)}
-        className="label px-2 py-1 transition-colors hover:text-bone disabled:opacity-50"
-      >
-        Dismiss
-      </button>
+      </div>
     </li>
   );
 }
@@ -105,7 +107,7 @@ export function AlertBell() {
       {n > 0 && (
         <span
           aria-hidden
-          className="tnum absolute -top-2 -right-2 rounded-full bg-acid px-1 text-[10px] leading-4 text-ink"
+          className="tnum absolute -top-2 -right-2 rounded-full bg-acid px-1 text-[10px] leading-4 text-white"
         >
           {n}
         </span>
