@@ -58,61 +58,63 @@ export function AreaChart({
   const active = hover === null ? null : points[hover];
 
   return (
-    <div ref={ref} className="relative w-full" style={{ height }}>
-      {width > 0 && (
-        <svg
-          width={width}
-          height={height}
-          role="img"
-          aria-label={`${valueLabel || "Value"} from ${usd(points[0].value)} to ${usd(points[points.length - 1].value)}`}
-          onPointerMove={(e) => {
-            const rect = e.currentTarget.getBoundingClientRect();
-            const ratio = (e.clientX - rect.left) / rect.width;
-            setHover(Math.max(0, Math.min(points.length - 1, Math.round(ratio * (points.length - 1)))));
-          }}
-          onPointerLeave={() => setHover(null)}
-        >
-          <defs>
-            <linearGradient id={`fill-${color.slice(1)}`} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor={color} stopOpacity="0.24" />
-              <stop offset="100%" stopColor={color} stopOpacity="0" />
-            </linearGradient>
-          </defs>
+    <div>
+      <div ref={ref} className="relative w-full" style={{ height }}>
+        {width > 0 && (
+          <svg
+            width={width}
+            height={height}
+            role="img"
+            aria-label={`${valueLabel || "Value"} from ${usd(points[0].value)} to ${usd(points[points.length - 1].value)}`}
+            onPointerMove={(e) => {
+              const rect = e.currentTarget.getBoundingClientRect();
+              const ratio = (e.clientX - rect.left) / rect.width;
+              setHover(Math.max(0, Math.min(points.length - 1, Math.round(ratio * (points.length - 1)))));
+            }}
+            onPointerLeave={() => setHover(null)}
+          >
+            <defs>
+              <linearGradient id={`fill-${color.slice(1)}`} x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={color} stopOpacity="0.24" />
+                <stop offset="100%" stopColor={color} stopOpacity="0" />
+              </linearGradient>
+            </defs>
 
-          {/* Recessive baseline, so the eye reads the mark and not the chrome. */}
-          <line
-            x1="0"
-            x2={width}
-            y1={pad.top + plotH}
-            y2={pad.top + plotH}
-            stroke="var(--color-line)"
-          />
-          <path d={area} fill={`url(#fill-${color.slice(1)})`} />
-          <path d={line} fill="none" stroke={color} strokeWidth="2" strokeLinejoin="round" />
+            {/* Recessive baseline, so the eye reads the mark and not the chrome. */}
+            <line
+              x1="0"
+              x2={width}
+              y1={pad.top + plotH}
+              y2={pad.top + plotH}
+              stroke="var(--color-line)"
+            />
+            <path d={area} fill={`url(#fill-${color.slice(1)})`} />
+            <path d={line} fill="none" stroke={color} strokeWidth="2" strokeLinejoin="round" />
 
-          {active && (
-            <>
-              <line
-                x1={x(hover!)}
-                x2={x(hover!)}
-                y1={pad.top}
-                y2={pad.top + plotH}
-                stroke="var(--color-line)"
-              />
-              {/* Surface ring keeps the marker legible over the fill. */}
-              <circle cx={x(hover!)} cy={y(active.value)} r="5" fill="var(--color-surface)" />
-              <circle cx={x(hover!)} cy={y(active.value)} r="4" fill={color} />
-            </>
-          )}
-        </svg>
-      )}
+            {active && (
+              <>
+                <line
+                  x1={x(hover!)}
+                  x2={x(hover!)}
+                  y1={pad.top}
+                  y2={pad.top + plotH}
+                  stroke="var(--color-line)"
+                />
+                {/* Surface ring keeps the marker legible over the fill. */}
+                <circle cx={x(hover!)} cy={y(active.value)} r="5" fill="var(--color-surface)" />
+                <circle cx={x(hover!)} cy={y(active.value)} r="4" fill={color} />
+              </>
+            )}
+          </svg>
+        )}
 
-      {active && <Tooltip x={x(hover!)}>
-        <span className="block text-bone">{usd(active.value)}</span>
-        <span className="text-muted">{active.label}</span>
-      </Tooltip>}
+        {active && <Tooltip x={x(hover!)}>
+          <span className="block text-bone">{usd(active.value)}</span>
+          <span className="text-muted">{active.label}</span>
+        </Tooltip>}
+      </div>
 
-      <div className="tnum flex justify-between text-[11px] text-muted">
+      <div className="tnum mt-1 flex justify-between text-[11px] text-muted">
         <span>{points[0]?.label}</span>
         <span>{points[points.length - 1]?.label}</span>
       </div>

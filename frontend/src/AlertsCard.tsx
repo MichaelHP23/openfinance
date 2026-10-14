@@ -107,7 +107,7 @@ export function AlertBell() {
       {n > 0 && (
         <span
           aria-hidden
-          className="tnum absolute -top-2 -right-2 rounded-full bg-acid px-1 text-[10px] leading-4 text-white"
+          className="tnum absolute -top-2 -right-2 rounded-full bg-bone px-1 text-[10px] leading-4 text-white"
         >
           {n}
         </span>
