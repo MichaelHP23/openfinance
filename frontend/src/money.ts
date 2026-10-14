@@ -115,3 +115,45 @@ export const longDate = (iso: string) =>
     year: "numeric",
     timeZone: "UTC",
   });
+
+/** Running total of money out for one month ("YYYY-MM"), a point per day from the 1st
+ * through `throughDay`. Ignored transactions are left out, as everywhere else. */
+export function cumulativeSpend(txns: Txn[], key: string, throughDay: number) {
+  const byDay = new Array<number>(throughDay + 1).fill(0);
+  for (const t of txns) {
+    if (t.ignored || monthKey(t.posted_at) !== key) continue;
+    const amt = num(t.amount);
+    const day = Number(t.posted_at.slice(8, 10));
+    if (amt < 0 && day <= throughDay) byDay[day] += -amt;
+  }
+  let total = 0;
+  return byDay.slice(1).map((spent, i) => ({ label: `${key}-${String(i + 1).padStart(2, "0")}`, value: (total += spent) }));
+}
+
+/** Accounts rolled up the way a dashboard lists them. A group with no accounts is left
+ * out; "Net cash" is spendable money minus what the cards are owed. */
+export function accountGroups(accounts: Account[]) {
+  const sum = (...types: string[]) =>
+    accounts.filter((a) => types.includes(a.type)).reduce((n, a) => n + num(a.balance), 0);
+  const has = (...types: string[]) => accounts.some((a) => types.includes(a.type));
+  const cards = Math.abs(sum("credit_card"));
+  const groups = [
+    has("checking", "cash") && { key: "checking", label: "Checking", total: sum("checking", "cash"), owed: false },
+    has("credit_card") && { key: "cards", label: "Card balance", total: cards, owed: true },
+    has("checking", "cash", "savings") &&
+      has("credit_card") && {
+        key: "net_cash",
+        label: "Net cash",
+        total: sum("checking", "cash", "savings") - cards,
+        owed: false,
+      },
+    has("savings") && { key: "savings", label: "Savings", total: sum("savings"), owed: false },
+    has("investment", "crypto") && {
+      key: "investments",
+      label: "Investments",
+      total: sum("investment", "crypto"),
+      owed: false,
+    },
+  ];
+  return groups.filter((g) => g !== false);
+}

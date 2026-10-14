@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { flowTotals, longDate, monthTotals, monthlySeries, netWorth, pct, topMerchants, units, usd } from "./money";
+import { accountGroups, cumulativeSpend, flowTotals, longDate, monthTotals, monthlySeries, netWorth, pct, topMerchants, units, usd } from "./money";
 import type { Account, Txn } from "./data";
 
 const acct = (type: string, balance: string): Account => ({
@@ -120,5 +120,40 @@ describe("pct", () => {
 describe("longDate", () => {
   it("keeps the year, because a trade log spans them", () => {
     expect(longDate("2026-03-14")).toBe("Mar 14, 2026");
+  });
+});
+
+describe("cumulativeSpend", () => {
+  it("is a running total of money out, one point per day, through the day asked for", () => {
+    const t = [
+      txn("2026-03-01T00:00:00Z", "-10.00"),
+      txn("2026-03-03T00:00:00Z", "-5.00"),
+      txn("2026-03-03T00:00:00Z", "2000.00"),
+      txn("2026-03-04T00:00:00Z", "-900.00", "Sofa Barn", true),
+      txn("2026-03-09T00:00:00Z", "-99.00"),
+      txn("2026-02-02T00:00:00Z", "-77.00"),
+    ];
+    expect(cumulativeSpend(t, "2026-03", 4).map((p) => p.value)).toEqual([10, 10, 15, 15]);
+  });
+});
+
+describe("accountGroups", () => {
+  it("rolls accounts up the way a dashboard lists them, leaving out empty groups", () => {
+    const groups = accountGroups([
+      acct("checking", "1000.00"),
+      acct("cash", "50.00"),
+      acct("savings", "4000.00"),
+      acct("credit_card", "-300.00"),
+    ]);
+    expect(groups).toEqual([
+      { key: "checking", label: "Checking", total: 1050, owed: false },
+      { key: "cards", label: "Card balance", total: 300, owed: true },
+      { key: "net_cash", label: "Net cash", total: 4750, owed: false },
+      { key: "savings", label: "Savings", total: 4000, owed: false },
+    ]);
+  });
+
+  it("is empty with no accounts", () => {
+    expect(accountGroups([])).toEqual([]);
   });
 });

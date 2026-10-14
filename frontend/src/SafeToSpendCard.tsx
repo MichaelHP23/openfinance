@@ -12,7 +12,7 @@ export function SafeToSpendCard() {
   const bills = `${data.bills_due} bill${data.bills_due === 1 ? "" : "s"} due before then`;
   const window = data.until ? `until payday on ${shortDate(data.until)}` : "over the next 30 days";
   return (
-    <Card className="mb-8" delay={50}>
+    <Card className="mb-4" delay={50}>
       <p className="label">Safe to spend</p>
       <p className={`tnum mt-2 text-3xl ${spare ? "text-acid" : "text-clay"}`}>
         {usd(data.amount)}

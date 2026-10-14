@@ -52,18 +52,18 @@ export function Shell({ children, localMode }: { children: ReactNode; localMode:
                 end={n.end}
                 className={({ isActive }) =>
                   [
-                    "relative rounded-lg px-3 py-2 text-sm transition-colors",
+                    "relative flex items-center gap-3 rounded-full px-4 py-2.5 text-sm transition-colors",
                     isActive
                       ? "bg-tint font-medium text-brand"
                       : "text-muted hover:bg-hover hover:text-bone",
                   ].join(" ")
                 }
               >
-                {({ isActive }) => (
+                {() => (
                   <>
-                    {isActive && (
-                      <span className="absolute top-1/2 left-0 h-4 w-[2px] -translate-y-1/2 rounded-full bg-brand" />
-                    )}
+                    <span aria-hidden className="w-4 text-center text-base leading-none">
+                      {n.glyph}
+                    </span>
                     {n.label}
                   </>
                 )}
@@ -88,9 +88,12 @@ export function Shell({ children, localMode }: { children: ReactNode; localMode:
 
       <div className="flex min-w-0 flex-1 flex-col">
         {/* The sidebar is desktop-only, so small screens get their own header… */}
-        <header className="flex items-baseline gap-2 bg-brand px-5 py-4 text-white md:hidden [&_a]:text-white">
-          <span className="font-display text-2xl leading-none">O</span>
-          <span className="text-xs font-medium tracking-[0.2em] uppercase">Finance</span>
+        <header className="grid grid-cols-[2rem_1fr_2rem] items-center bg-brand px-4 py-3.5 text-white md:hidden [&_a]:text-white">
+          <span />
+          <span className="flex items-baseline justify-center gap-2">
+            <span className="font-display text-2xl leading-none">O</span>
+            <span className="text-xs font-medium tracking-[0.2em] uppercase">Finance</span>
+          </span>
           <AlertBell />
         </header>
 
