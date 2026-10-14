@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "./api/client";
 import { BarChart } from "./charts";
 import { shortDate, usd } from "./money";
+import { SERIES } from "./palette";
 import { TxnRows } from "./transactions";
 import { Card, Empty, Stat } from "./ui/Shell";
 
@@ -120,6 +121,80 @@ export function RecurringStats() {
   );
 }
 
+const WEEKDAYS = ["S", "M", "T", "W", "T", "F", "S"];
+const CALENDAR_DAYS = 35;
+
+/** A stable colour for a series' disc: the same name always lands on the same one. */
+const discColour = (name: string) =>
+  SERIES[[...name].reduce((n, ch) => n + ch.charCodeAt(0), 0) % SERIES.length];
+
+const signedAmount = (amount: string) =>
+  Number(amount) > 0 ? `+${usd(amount)}` : usd(Math.abs(Number(amount)));
+
+/** Five weeks from this week's Sunday, a disc on each day something is expected.
+ * It is the overview; the list under it carries the names and amounts, so a cell needs
+ * no room for text and the grid still works at phone width. */
+export function BillCalendar({
+  upcoming,
+  today = new Date(),
+}: {
+  upcoming: Summary["upcoming"];
+  today?: Date;
+}) {
+  const start = new Date(today.getFullYear(), today.getMonth(), today.getDate() - today.getDay());
+  const days = Array.from({ length: CALENDAR_DAYS }, (_, i) => {
+    const d = new Date(start.getFullYear(), start.getMonth(), start.getDate() + i);
+    const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    return { d, iso, due: upcoming.filter((u) => u.on === iso) };
+  });
+  const isToday = (d: Date) => d.toDateString() === today.toDateString();
+  const short = (d: Date) => d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+
+  return (
+    <div role="grid" aria-label="Expected charges, next five weeks" className="mb-4">
+      <div role="row" className="grid grid-cols-7 gap-1">
+        {WEEKDAYS.map((w, i) => (
+          <span key={i} role="columnheader" className="label pb-1 text-center">
+            {w}
+          </span>
+        ))}
+      </div>
+      {[0, 1, 2, 3, 4].map((week) => (
+        <div key={week} role="row" className="mt-1 grid grid-cols-7 gap-1">
+          {days.slice(week * 7, week * 7 + 7).map(({ d, iso, due }) => (
+            <div
+              key={iso}
+              role="gridcell"
+              aria-current={isToday(d) ? "date" : undefined}
+              aria-label={`${short(d)}: ${due.length ? `${due.length} expected` : "nothing expected"}`}
+              title={due.map((u) => `${u.label} ${signedAmount(u.amount)}`).join("\n") || undefined}
+              className={`flex min-h-14 flex-col items-center gap-1 rounded-lg border p-1.5 ${
+                isToday(d) ? "border-brand" : "border-line"
+              } ${d < today && !isToday(d) ? "opacity-40" : ""}`}
+            >
+              <span aria-hidden className={`tnum text-[11px] ${isToday(d) ? "font-medium text-brand" : "text-muted"}`}>
+                {d.getDate() === 1 ? short(d) : d.getDate()}
+              </span>
+              <span aria-hidden className="flex flex-wrap justify-center gap-0.5">
+                {due.slice(0, 3).map((u) => (
+                  <span
+                    key={u.id}
+                    className="flex size-4 items-center justify-center rounded-full text-[9px] font-medium text-white"
+                    style={{ background: discColour(u.label) }}
+                  >
+                    {u.label.trim().charAt(0).toUpperCase()}
+                  </span>
+                ))}
+                {due.length > 3 && <span className="text-[9px] text-muted">+{due.length - 3}</span>}
+              </span>
+            </div>
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function UpcomingCard({ delay = 100 }: { delay?: number }) {
   const { data } = useSummary();
   const upcoming = data?.upcoming ?? [];
@@ -133,16 +208,29 @@ export function UpcomingCard({ delay = 100 }: { delay?: number }) {
       {upcoming.length === 0 ? (
         <Empty>Nothing expected in the next 30 days.</Empty>
       ) : (
-        // A month grid on a phone is twelve pixels a cell — the bill calendar is a list.
-        <ul className="divide-y divide-line/60">
-          {upcoming.map((u) => (
-            <li key={`${u.id}-${u.on}`} className="flex items-baseline gap-3 py-2.5">
-              <span className="tnum w-16 shrink-0 text-[13px] text-muted">{shortDate(u.on)}</span>
-              <span className="min-w-0 flex-1 truncate text-sm">{u.label}</span>
-              <span className="tnum shrink-0 text-sm">{usd(u.amount)}</span>
-            </li>
-          ))}
-        </ul>
+        // The grid shows where the month is heavy; the list says what and how much. A
+        // grid alone cannot hold names at phone width, so it never has to.
+        <>
+          <BillCalendar upcoming={upcoming} />
+          <ul className="divide-y divide-line/60">
+            {upcoming.map((u) => (
+              <li key={`${u.id}-${u.on}`} className="flex items-center gap-3 py-2.5">
+                <span
+                  aria-hidden
+                  className="flex size-7 shrink-0 items-center justify-center rounded-full text-xs font-medium text-white"
+                  style={{ background: discColour(u.label) }}
+                >
+                  {u.label.trim().charAt(0).toUpperCase()}
+                </span>
+                <span className="min-w-0 flex-1 truncate text-sm">{u.label}</span>
+                <span className="tnum w-16 shrink-0 text-right text-[13px] text-muted">
+                  {shortDate(u.on)}
+                </span>
+                <span className="tnum w-24 shrink-0 text-right text-sm">{usd(u.amount)}</span>
+              </li>
+            ))}
+          </ul>
+        </>
       )}
     </Card>
   );
@@ -258,6 +346,13 @@ function SeriesRow({ series: s }: { series: Series }) {
         aria-expanded={open}
         className="flex w-full items-center gap-3 py-3.5 text-left"
       >
+        <span
+          aria-hidden
+          className="flex size-9 shrink-0 items-center justify-center rounded-full text-sm font-medium text-white"
+          style={{ background: discColour(s.label) }}
+        >
+          {s.label.trim().charAt(0).toUpperCase()}
+        </span>
         <span className="min-w-0 flex-1">
           <span className="block truncate text-sm">{s.label}</span>
           <span className="label">

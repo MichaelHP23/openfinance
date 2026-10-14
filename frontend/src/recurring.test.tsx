@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { beforeEach, expect, test, vi } from "vitest";
 import { RecurringPage } from "./pages/RecurringPage";
+import { BillCalendar } from "./recurring";
 import type { Series, Summary } from "./recurring";
 
 vi.mock("./api/client", () => ({ API_BASE: "", apiFetch: vi.fn() }));
@@ -69,7 +70,7 @@ test("shows the monthly commitment, incoming and active count", async () => {
   show();
   expect(await screen.findByText("$412.37")).toBeInTheDocument();
   expect(screen.getByText("$5,200.00")).toBeInTheDocument();
-  expect(screen.getByText("14")).toBeInTheDocument();
+  expect(screen.getByText(/active series/i).parentElement).toHaveTextContent("14");
 });
 
 test("lists the next 30 days, soonest first", async () => {
@@ -230,4 +231,39 @@ test("a cancelled series with no later charge is just cancelled", async () => {
   show();
   expect(await screen.findByText("cancelled")).toBeInTheDocument();
   expect(screen.queryByText("still billing you")).not.toBeInTheDocument();
+});
+
+// --- bill calendar --------------------------------------------------------------------
+
+test("the calendar is five weeks from this week's Sunday, with today marked", () => {
+  render(<BillCalendar upcoming={[]} today={new Date(2026, 6, 15)} />); // Wed 15 Jul 2026
+  const days = screen.getAllByRole("gridcell");
+  expect(days).toHaveLength(35);
+  expect(days[0]).toHaveAccessibleName("Jul 12: nothing expected");
+  expect(days[34]).toHaveAccessibleName("Aug 15: nothing expected");
+  expect(screen.getByRole("gridcell", { current: "date" })).toHaveAccessibleName(
+    "Jul 15: nothing expected",
+  );
+});
+
+test("a day with charges says how many and names them on hover", () => {
+  render(
+    <BillCalendar
+      today={new Date(2026, 6, 15)}
+      upcoming={[
+        { id: "s1", label: "Netflix", on: "2026-07-20", amount: "-15.49" },
+        { id: "s2", label: "City Power", on: "2026-07-20", amount: "-64.20" },
+        { id: "s3", label: "Payroll", on: "2026-07-31", amount: "3200.00" },
+        { id: "s4", label: "Too far out", on: "2026-09-30", amount: "-1.00" },
+      ]}
+    />,
+  );
+  const day = screen.getByRole("gridcell", { name: "Jul 20: 2 expected" });
+  expect(day).toHaveAttribute("title", "Netflix $15.49\nCity Power $64.20");
+  expect(screen.getByRole("gridcell", { name: "Jul 31: 1 expected" })).toHaveAttribute(
+    "title",
+    "Payroll +$3,200.00",
+  );
+  // Outside the five weeks: not drawn anywhere.
+  expect(screen.queryByTitle(/Too far out/)).not.toBeInTheDocument();
 });
