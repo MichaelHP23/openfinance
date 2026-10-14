@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, expect, test, vi } from "vitest";
 import { OverviewPage } from "./OverviewPage";
@@ -69,6 +69,12 @@ beforeEach(() => {
   vi.mocked(apiFetch).mockReset();
 });
 
+test("is titled Dashboard", async () => {
+  api();
+  show();
+  expect(await screen.findByRole("heading", { level: 1, name: "Dashboard" })).toBeInTheDocument();
+});
+
 test("leads with this month's spend, leaving ignored transactions out of it", async () => {
   api();
   show();
@@ -81,9 +87,24 @@ test("lists accounts rolled up by kind, with what the cards are owed", async () 
   show();
   const card = (await screen.findByRole("heading", { name: "Accounts" })).closest("section")!;
   expect(await within(card).findByText("Checking")).toBeInTheDocument();
-  expect(within(card).getByText("Card balance")).toBeInTheDocument();
+  expect(within(card).getByText("Card Balance")).toBeInTheDocument();
   expect(within(card).getByText("$300.00")).toBeInTheDocument();
-  expect(within(card).getByText("Net cash")).toBeInTheDocument();
+  expect(within(card).getByText("Net Cash")).toBeInTheDocument();
+  expect(within(card).getByRole("link", { name: "Add account" })).toHaveAttribute("href", "/accounts");
+});
+
+test("an account group opens to the accounts inside it", async () => {
+  api({ "/accounts": [{ ...account("checking", "1000.00"), name: "Everyday Checking" }] });
+  show();
+  const toggle = await screen.findByRole("button", { name: /Checking/ });
+  expect(toggle).toHaveAttribute("aria-expanded", "false");
+  expect(screen.queryByText("Everyday Checking")).not.toBeInTheDocument();
+  fireEvent.click(toggle);
+  expect(toggle).toHaveAttribute("aria-expanded", "true");
+  expect(screen.getByRole("link", { name: /Everyday Checking/ })).toHaveAttribute(
+    "href",
+    "/accounts/checking",
+  );
 });
 
 test("shows the bills coming up", async () => {
@@ -92,6 +113,8 @@ test("shows the bills coming up", async () => {
   const card = (await screen.findByRole("heading", { name: "Upcoming" })).closest("section")!;
   expect(await within(card).findByText("Netflix")).toBeInTheDocument();
   expect(within(card).getByText("$15.99")).toBeInTheDocument();
+  // Each tile says how far off it is, the way a calendar would not.
+  expect(within(card).getByText(/^(today|tomorrow|in \d+ days|overdue)$/i)).toBeInTheDocument();
 });
 
 test("recent activity marks an ignored transaction instead of hiding it", async () => {

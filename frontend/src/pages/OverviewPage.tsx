@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import { apiFetch } from "../api/client";
 import { AreaChart } from "../charts";
 import { useAccounts, useNetWorthHistory, useTransactions, type Txn } from "../data";
+import { SERIES } from "../palette";
 import { useSafeToSpend } from "../forecast";
 import {
   accountGroups,
@@ -26,7 +27,7 @@ import { SafeToSpendCard } from "../SafeToSpendCard";
 const NOW = new Date();
 const key = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 const THIS_MONTH = key(NOW);
-const LAST_MONTH = key(new Date(NOW.getFullYear(), NOW.getMonth() - 1, 1));
+const PRIOR_MONTHS = [1, 2, 3].map((back) => key(new Date(NOW.getFullYear(), NOW.getMonth() - back, 1)));
 const TODAY = NOW.getDate();
 const DAY_MS = 86_400_000;
 
@@ -39,19 +40,20 @@ const GROUP_GLYPH: Record<string, string> = {
 };
 
 /** The headline: what has gone out this month, the curve it took, and how that compares
- * with the same day last month. */
+ * with where the last three months stood on the same day. */
 function SpendHero({ txns }: { txns: Txn[] }) {
   const { data: safe } = useSafeToSpend();
   const month = monthTotals(txns, THIS_MONTH);
   const curve = cumulativeSpend(txns, THIS_MONTH, TODAY);
-  const lastMonthByNow = cumulativeSpend(txns, LAST_MONTH, TODAY).at(-1)?.value ?? 0;
-  const gap = lastMonthByNow - month.outflow;
+  // Months with no spending at all are left out of the average: they are missing history,
+  // not frugal months.
+  const prior = PRIOR_MONTHS.map((k) => cumulativeSpend(txns, k, TODAY).at(-1)?.value ?? 0).filter(
+    (v) => v > 0,
+  );
+  const average = prior.length ? prior.reduce((a, b) => a + b, 0) / prior.length : 0;
+  const gap = average - month.outflow;
   // `until` is a date; the days are counted from today's date, not from this instant.
-  const paydayIn = safe?.until
-    ? Math.round(
-        (Date.parse(safe.until) - Date.UTC(NOW.getFullYear(), NOW.getMonth(), TODAY)) / DAY_MS,
-      )
-    : null;
+  const paydayIn = safe?.until ? Math.round((Date.parse(safe.until) - TODAY_UTC) / DAY_MS) : null;
 
   return (
     <section className="card rise mb-4 overflow-hidden">
@@ -61,7 +63,7 @@ function SpendHero({ txns }: { txns: Txn[] }) {
             <p className="text-[13px] text-muted">Current spend this month</p>
             <p className="tnum mt-1 text-4xl font-medium tracking-tight">{usd(month.outflow)}</p>
           </div>
-          {lastMonthByNow > 0 && (
+          {average > 0 && (
             <p className="flex items-center gap-2 text-right text-[13px] leading-tight text-muted">
               <span
                 aria-hidden
@@ -74,7 +76,7 @@ function SpendHero({ txns }: { txns: Txn[] }) {
               <span>
                 {usd(Math.abs(gap))} {gap >= 0 ? "below" : "above"}
                 <br />
-                last month by now
+                avg. spend
               </span>
             </p>
           )}
@@ -85,7 +87,18 @@ function SpendHero({ txns }: { txns: Txn[] }) {
           </div>
         )}
       </div>
-      <dl className="grid grid-cols-2 border-t border-line text-sm sm:grid-cols-3">
+      {paydayIn !== null && (
+        <p className="flex items-center gap-3 border-t border-line px-5 py-3 text-sm">
+          <span
+            aria-hidden
+            className="flex h-6 w-8 items-center justify-center rounded-md border border-acid text-[11px] text-acid"
+          >
+            $
+          </span>
+          Payday {paydayIn <= 0 ? "today" : `in ${paydayIn} day${paydayIn === 1 ? "" : "s"}`}
+        </p>
+      )}
+      <dl className="grid grid-cols-2 border-t border-line text-sm">
         <div className="px-5 py-3">
           <dt className="text-[13px] text-muted">Income this month</dt>
           <dd className="tnum mt-0.5 text-acid">{usd(month.inflow)}</dd>
@@ -94,14 +107,6 @@ function SpendHero({ txns }: { txns: Txn[] }) {
           <dt className="text-[13px] text-muted">Net this month</dt>
           <dd className={`tnum mt-0.5 ${month.net < 0 ? "text-clay" : ""}`}>{usd(month.net)}</dd>
         </div>
-        {paydayIn !== null && (
-          <div className="col-span-2 border-t border-line px-5 py-3 sm:col-span-1 sm:border-t-0 sm:border-l">
-            <dt className="text-[13px] text-muted">Payday</dt>
-            <dd className="mt-0.5">
-              {paydayIn <= 0 ? "today" : `in ${paydayIn} day${paydayIn === 1 ? "" : "s"}`}
-            </dd>
-          </div>
-        )}
       </dl>
     </section>
   );
@@ -127,6 +132,95 @@ function Row({ glyph, title, sub, value, tone = "" }: {
         {sub && <span className="block text-[12px] text-muted">{sub}</span>}
       </span>
       <span className={`tnum shrink-0 text-sm ${tone}`}>{value}</span>
+    </li>
+  );
+}
+
+type Group = ReturnType<typeof accountGroups>[number];
+
+/** One line of the Accounts card. A group with accounts in it opens to list them. */
+function AccountGroup({ group }: { group: Group }) {
+  const [open, setOpen] = useState(false);
+  const tone = group.key === "net_cash" ? (group.total < 0 ? "text-clay" : "text-acid") : "";
+  const line = (
+    <>
+      <span
+        aria-hidden
+        className="flex size-9 shrink-0 items-center justify-center rounded-full bg-surface-2 text-sm text-muted"
+      >
+        {GROUP_GLYPH[group.key]}
+      </span>
+      <span className="min-w-0 flex-1 truncate text-sm">{group.label}</span>
+      <span className={`tnum shrink-0 text-sm ${tone}`}>{usd(group.total)}</span>
+    </>
+  );
+  return (
+    <li className="border-b border-line last:border-0">
+      {group.accounts.length === 0 ? (
+        <div className="flex items-center gap-3 py-3 pr-6">{line}</div>
+      ) : (
+        <button
+          type="button"
+          aria-expanded={open}
+          onClick={() => setOpen((v) => !v)}
+          className="flex w-full items-center gap-3 py-3 text-left"
+        >
+          {line}
+          <span aria-hidden className={`w-3 text-xs text-muted transition-transform ${open ? "rotate-180" : ""}`}>
+            ⌄
+          </span>
+        </button>
+      )}
+      {open && (
+        <ul className="pb-3 pl-12">
+          {group.accounts.map((a) => (
+            <li key={a.id}>
+              <Link
+                to={`/accounts/${a.id}`}
+                className="flex justify-between gap-3 py-1.5 pr-6 text-[13px] text-muted transition-colors hover:text-bone"
+              >
+                <span className="truncate">{a.name}</span>
+                <span className="tnum shrink-0">{usd(Math.abs(Number(a.balance)))}</span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
+    </li>
+  );
+}
+
+const TODAY_UTC = Date.UTC(NOW.getFullYear(), NOW.getMonth(), TODAY);
+
+/** "Today", "Tomorrow", "In 5 days" — how far off a dated charge is. */
+function daysUntil(on: string) {
+  const days = Math.round((Date.parse(on) - TODAY_UTC) / DAY_MS);
+  if (days < 0) return "Overdue";
+  if (days === 0) return "Today";
+  return days === 1 ? "Tomorrow" : `In ${days} days`;
+}
+
+/** A recurring charge or payday that is due soon, as a small tile. The disc stands in
+ * for a merchant logo: an initial on one of the chart colours, picked by name. */
+function UpcomingTile({ label, on, amount }: { label: string; on: string; amount: string }) {
+  const incoming = Number(amount) > 0;
+  const colour = SERIES[label.charCodeAt(0) % SERIES.length];
+  return (
+    <li className="w-28 shrink-0 overflow-hidden rounded-xl border border-line text-center">
+      <div className="flex h-12 items-center justify-center" style={{ background: `${colour}22` }}>
+        <span
+          aria-hidden
+          className="flex size-7 items-center justify-center rounded-full text-xs font-medium text-white"
+          style={{ background: colour }}
+        >
+          {label.trim().charAt(0).toUpperCase() || "·"}
+        </span>
+      </div>
+      <p className="mt-2 truncate px-2 text-[12px] text-muted">{label}</p>
+      <p className={`tnum text-sm font-medium ${incoming ? "text-acid" : ""}`}>
+        {incoming ? `+${usd(amount)}` : usd(Math.abs(Number(amount)))}
+      </p>
+      <p className="label mt-2 border-t border-line py-1.5">{daysUntil(on)}</p>
     </li>
   );
 }
@@ -166,7 +260,7 @@ export function OverviewPage() {
 
   const head = (
     <PageHead
-      title="Overview"
+      title="Dashboard"
       sub={NOW.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
     />
   );
@@ -200,6 +294,19 @@ export function OverviewPage() {
       <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
         <div className="min-w-0">
           <SpendHero txns={txns} />
+
+          <Card className="mb-4" delay={100}>
+            <CardHead title="Upcoming" to="/recurring" more="All recurring" />
+            {upcoming.length === 0 ? (
+              <p className="py-3 text-sm text-muted">Nothing expected soon.</p>
+            ) : (
+              <ul className="mt-2 flex gap-3 overflow-x-auto pb-1">
+                {upcoming.slice(0, 8).map((u) => (
+                  <UpcomingTile key={u.id} label={u.label} on={u.on} amount={u.amount} />
+                ))}
+              </ul>
+            )}
+          </Card>
 
           <Card className="mb-4" delay={120}>
             <CardHead title="Recent activity" to="/transactions" more="View all" />
@@ -271,41 +378,20 @@ export function OverviewPage() {
 
         <div className="min-w-0">
           <Card className="mb-4" delay={80}>
-            <CardHead title="Accounts" to="/accounts" more="Manage" />
+            <div className="mb-1 flex items-baseline justify-between">
+              <h2 className="label">Accounts</h2>
+              <Link to="/accounts" className="text-[13px] underline underline-offset-2">
+                Add account
+              </Link>
+            </div>
             <ul>
               {groups.map((g) => (
-                <Row
-                  key={g.key}
-                  glyph={GROUP_GLYPH[g.key]}
-                  title={g.label}
-                  value={usd(g.total)}
-                  tone={g.owed || g.total < 0 ? "text-clay" : ""}
-                />
+                <AccountGroup key={g.key} group={g} />
               ))}
             </ul>
           </Card>
 
           <SafeToSpendCard />
-
-          <Card className="mb-4" delay={140}>
-            <CardHead title="Upcoming" to="/recurring" more="All recurring" />
-            {upcoming.length === 0 ? (
-              <p className="py-3 text-sm text-muted">Nothing expected soon.</p>
-            ) : (
-              <ul>
-                {upcoming.slice(0, 5).map((u) => (
-                  <Row
-                    key={u.id}
-                    glyph={u.label.trim().charAt(0).toUpperCase() || "·"}
-                    title={u.label}
-                    sub={shortDate(u.on)}
-                    value={Number(u.amount) > 0 ? `+${usd(u.amount)}` : usd(Math.abs(Number(u.amount)))}
-                    tone={Number(u.amount) > 0 ? "text-acid" : ""}
-                  />
-                ))}
-              </ul>
-            )}
-          </Card>
 
           <Card className="mb-4" delay={180}>
             <h2 className="label mb-4">Where it goes</h2>

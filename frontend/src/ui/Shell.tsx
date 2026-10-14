@@ -5,28 +5,32 @@ import { AlertBell } from "../AlertsCard";
 import { MoreMenu } from "./MoreMenu";
 import { OfflineBanner } from "./OfflineBanner";
 
-// Three fixed mobile tabs, down from five — see PLAN-CONSTRAINTS.md's Navigation
-// section. A fourth slot is the MoreMenu trigger rendered below, not a fourth entry
-// here: the trigger isn't a route, so giving it a fake NAV-shaped object just to keep a
-// literal "four items in one array" would be a distinction with no behavioral payoff.
+// The four destinations the phone tab bar always shows, in the order a money app leads
+// with them; everything else sits behind More. The sidebar shows both lists.
+// ponytail: this was three tabs (PLAN-CONSTRAINTS.md, Navigation). Four plus More is
+// five slots of 78px at 390px wide, which still fits an 11px label.
 const NAV = [
-  { to: "/", label: "Overview", short: "Overview", end: true, glyph: "◔" },
-  { to: "/accounts", label: "Accounts", short: "Accounts", end: false, glyph: "▤" },
-  { to: "/transactions", label: "Transactions", short: "Activity", end: false, glyph: "⇅" },
+  { to: "/", label: "Dashboard", short: "Dashboard", end: true, glyph: "◔" },
+  { to: "/recurring", label: "Recurring", short: "Recurring", end: false, glyph: "↻" },
+  { to: "/reports", label: "Spending", short: "Spending", end: false, glyph: "▦" },
+  { to: "/transactions", label: "Transactions", short: "Transactions", end: false, glyph: "⇅" },
 ];
 
-// Destinations that don't fit the mobile tab bar's three fixed slots. Desktop's sidebar
-// still shows every one of these, undivided with NAV — the ceiling here is a phone's
-// width, not a design preference. P3 and P5 each push one entry onto this array and
-// change nothing else; a plan that rebuilds this menu instead is wrong.
+// Settings is last on purpose: the sidebar leaves it off (it lives behind the gear by
+// the wordmark) and the phone's More sheet keeps it at the bottom.
 export const MORE = [
-  { to: "/investments", label: "Investments", short: "Invest", end: false, glyph: "◈" },
-  { to: "/recurring", label: "Recurring", short: "Bills", end: false, glyph: "↻" },
   { to: "/budgets", label: "Budgets", short: "Budgets", end: false, glyph: "▥" },
   { to: "/goals", label: "Goals", short: "Goals", end: false, glyph: "◎" },
-  { to: "/reports", label: "Reports", short: "Reports", end: false, glyph: "▦" },
+  { to: "/accounts", label: "Accounts", short: "Accounts", end: false, glyph: "▤" },
+  { to: "/investments", label: "Investments", short: "Invest", end: false, glyph: "◈" },
   { to: "/settings", label: "Settings", short: "Settings", end: false, glyph: "⚙" },
 ];
+
+const Gear = ({ className = "" }: { className?: string }) => (
+  <NavLink to="/settings" aria-label="Settings" className={`text-lg leading-none ${className}`}>
+    <span aria-hidden>⚙</span>
+  </NavLink>
+);
 
 export function Shell({ children, localMode }: { children: ReactNode; localMode: boolean }) {
   const logout = async () => {
@@ -38,14 +42,14 @@ export function Shell({ children, localMode }: { children: ReactNode; localMode:
     <div className="flex min-h-screen">
       <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col justify-between border-r border-line bg-surface px-5 py-7 md:flex">
         <div>
-          <div className="mb-10 flex items-baseline gap-2">
-            <span className="font-display text-3xl leading-none text-brand">O</span>
+          <div className="mb-8 flex items-center gap-2">
+            <Gear className="text-muted transition-colors hover:text-bone" />
+            <span className="font-display text-2xl leading-none text-brand">O</span>
             <span className="text-sm font-medium tracking-[0.2em] uppercase">Finance</span>
-            <AlertBell />
           </div>
 
-          <nav className="flex flex-col gap-1">
-            {[...NAV, ...MORE].map((n) => (
+          <nav aria-label="Main" className="flex flex-col gap-1">
+            {[...NAV, ...MORE.filter((n) => n.to !== "/settings")].map((n) => (
               <NavLink
                 key={n.to}
                 to={n.to}
@@ -88,8 +92,8 @@ export function Shell({ children, localMode }: { children: ReactNode; localMode:
 
       <div className="flex min-w-0 flex-1 flex-col">
         {/* The sidebar is desktop-only, so small screens get their own header… */}
-        <header className="grid grid-cols-[2rem_1fr_2rem] items-center bg-brand px-4 py-3.5 text-white md:hidden [&_a]:text-white">
-          <span />
+        <header className="band grid grid-cols-[2rem_1fr_2rem] items-center px-4 py-3.5 text-white md:hidden [&_a]:text-white">
+          <Gear />
           <span className="flex items-baseline justify-center gap-2">
             <span className="font-display text-2xl leading-none">O</span>
             <span className="text-xs font-medium tracking-[0.2em] uppercase">Finance</span>
@@ -97,8 +101,12 @@ export function Shell({ children, localMode }: { children: ReactNode; localMode:
           <AlertBell />
         </header>
 
-        <main className="min-w-0 flex-1 px-5 py-6 pb-28 md:px-10 md:py-12 md:pb-12">
-          <div className="mx-auto w-full max-w-5xl">
+        <main className="relative min-w-0 flex-1 px-5 py-6 pb-28 md:px-10 md:py-10 md:pb-12">
+          <div aria-hidden className="band absolute inset-x-0 top-0 h-44 md:h-52" />
+          <div className="absolute top-9 right-10 hidden text-white md:block [&_a]:text-white">
+            <AlertBell />
+          </div>
+          <div className="relative mx-auto w-full max-w-5xl">
             <OfflineBanner />
             {children}
           </div>
@@ -107,6 +115,7 @@ export function Shell({ children, localMode }: { children: ReactNode; localMode:
 
       {/* …and a thumb-reachable tab bar, clearing the iPhone home indicator. */}
       <nav
+        aria-label="Tabs"
         className="fixed inset-x-0 bottom-0 z-20 flex border-t border-line bg-surface/95 backdrop-blur md:hidden"
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
       >
@@ -117,8 +126,8 @@ export function Shell({ children, localMode }: { children: ReactNode; localMode:
             end={n.end}
             className={({ isActive }) =>
               [
-                "flex flex-1 flex-col items-center gap-1 py-2.5 text-[11px] transition-colors",
-                isActive ? "text-brand" : "text-muted",
+                "flex min-w-0 flex-1 flex-col items-center gap-1 border-t-2 py-2.5 text-[11px] transition-colors",
+                isActive ? "border-brand text-brand" : "border-transparent text-muted",
               ].join(" ")
             }
           >
@@ -140,9 +149,9 @@ export function Shell({ children, localMode }: { children: ReactNode; localMode:
 
 export function PageHead({ title, sub }: { title: string; sub?: string }) {
   return (
-    <header className="rise mb-8">
-      <h1 className="font-display text-4xl tracking-tight md:text-5xl">{title}</h1>
-      {sub && <p className="mt-1 text-sm text-muted">{sub}</p>}
+    <header className="rise mb-6 text-white">
+      <h1 className="font-display text-3xl tracking-tight md:text-4xl">{title}</h1>
+      {sub && <p className="mt-1 text-sm text-white/80">{sub}</p>}
     </header>
   );
 }
@@ -180,7 +189,7 @@ export function Stat({ label, value, tone = "" }: { label: string; value: string
 
 export function Empty({ children }: { children: ReactNode }) {
   return (
-    <p className="rounded-lg border border-dashed border-line px-4 py-6 text-center text-sm text-muted">
+    <p className="rounded-lg border border-dashed border-line bg-surface px-4 py-6 text-center text-sm text-muted">
       {children}
     </p>
   );

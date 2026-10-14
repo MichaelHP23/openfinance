@@ -130,30 +130,33 @@ export function cumulativeSpend(txns: Txn[], key: string, throughDay: number) {
   return byDay.slice(1).map((spent, i) => ({ label: `${key}-${String(i + 1).padStart(2, "0")}`, value: (total += spent) }));
 }
 
-/** Accounts rolled up the way a dashboard lists them. A group with no accounts is left
- * out; "Net cash" is spendable money minus what the cards are owed. */
+/** Accounts rolled up the way a dashboard lists them, each with the accounts inside it.
+ * A group with no accounts is left out; "Net Cash" is spendable money minus what the
+ * cards are owed, a sum rather than a place, so it opens to nothing. */
 export function accountGroups(accounts: Account[]) {
-  const sum = (...types: string[]) =>
-    accounts.filter((a) => types.includes(a.type)).reduce((n, a) => n + num(a.balance), 0);
-  const has = (...types: string[]) => accounts.some((a) => types.includes(a.type));
-  const cards = Math.abs(sum("credit_card"));
+  const of = (...types: string[]) => accounts.filter((a) => types.includes(a.type));
+  const sum = (list: Account[]) => list.reduce((n, a) => n + num(a.balance), 0);
+  const group = (key: string, label: string, list: Account[], owed = false) => ({
+    key,
+    label,
+    total: owed ? Math.abs(sum(list)) : sum(list),
+    owed,
+    accounts: list,
+  });
+  const checking = of("checking", "cash");
+  const cards = of("credit_card");
+  const savings = of("savings");
+  const investments = of("investment", "crypto");
   const groups = [
-    has("checking", "cash") && { key: "checking", label: "Checking", total: sum("checking", "cash"), owed: false },
-    has("credit_card") && { key: "cards", label: "Card balance", total: cards, owed: true },
-    has("checking", "cash", "savings") &&
-      has("credit_card") && {
-        key: "net_cash",
-        label: "Net cash",
-        total: sum("checking", "cash", "savings") - cards,
-        owed: false,
+    checking.length > 0 && group("checking", "Checking", checking),
+    cards.length > 0 && group("cards", "Card Balance", cards, true),
+    cards.length > 0 &&
+      checking.length + savings.length > 0 && {
+        ...group("net_cash", "Net Cash", []),
+        total: sum(checking) + sum(savings) - Math.abs(sum(cards)),
       },
-    has("savings") && { key: "savings", label: "Savings", total: sum("savings"), owed: false },
-    has("investment", "crypto") && {
-      key: "investments",
-      label: "Investments",
-      total: sum("investment", "crypto"),
-      owed: false,
-    },
+    savings.length > 0 && group("savings", "Savings", savings),
+    investments.length > 0 && group("investments", "Investments", investments),
   ];
   return groups.filter((g) => g !== false);
 }

@@ -145,11 +145,18 @@ describe("accountGroups", () => {
       acct("savings", "4000.00"),
       acct("credit_card", "-300.00"),
     ]);
-    expect(groups).toEqual([
+    expect(groups.map(({ accounts: _members, ...g }) => g)).toEqual([
       { key: "checking", label: "Checking", total: 1050, owed: false },
-      { key: "cards", label: "Card balance", total: 300, owed: true },
-      { key: "net_cash", label: "Net cash", total: 4750, owed: false },
+      { key: "cards", label: "Card Balance", total: 300, owed: true },
+      { key: "net_cash", label: "Net Cash", total: 4750, owed: false },
       { key: "savings", label: "Savings", total: 4000, owed: false },
+    ]);
+    // Each group can be opened to the accounts in it; Net Cash is a sum, so it has none.
+    expect(groups.map((g) => g.accounts.map((a) => a.type))).toEqual([
+      ["checking", "cash"],
+      ["credit_card"],
+      [],
+      ["savings"],
     ]);
   });
 

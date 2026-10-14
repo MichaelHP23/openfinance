@@ -35,7 +35,7 @@ test("mobile navigation and layout", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "Investments" })).toBeVisible();
   await checkWidth("investments");
 
-  await page.getByRole("link", { name: "Activity" }).click();
+  await page.getByRole("link", { name: "Transactions" }).click();
   await page.waitForTimeout(900);
   await expect(page.getByRole("heading", { name: "Transactions" })).toBeVisible();
   await checkWidth("transactions");
@@ -56,12 +56,12 @@ test.describe("360px width audit", () => {
   };
 
   const pages: [string, string][] = [
-    ["/", "Overview"],
+    ["/", "Dashboard"],
     ["/accounts", "Accounts"],
     ["/transactions", "Transactions"],
     ["/budgets", "Budgets"],
     ["/goals", "Goals"],
-    ["/reports", "Reports"],
+    ["/reports", "Spending"],
   ];
 
   for (const [path, heading] of pages) {

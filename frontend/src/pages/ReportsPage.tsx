@@ -62,7 +62,7 @@ export function ReportsPage() {
   const year = new Date().getFullYear();
   return (
     <>
-      <PageHead title="Reports" sub="Spending, cash flow, taxes, and the document vault." />
+      <PageHead title="Spending" sub="Spending, cash flow, taxes, and the document vault." />
       <SubTabs />
       <Routes>
         <Route index element={<SpendingTab />} />

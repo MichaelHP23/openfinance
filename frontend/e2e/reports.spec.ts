@@ -8,7 +8,7 @@ test("spending report, vault upload, and the estate checklist", async ({ page })
   const title = `Will ${stamp}`;
 
   await page.goto("/reports");
-  await expect(page.getByRole("heading", { name: "Reports" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Spending" })).toBeVisible();
 
   await page.goto("/reports/vault");
   await page.getByLabel("Title").fill(title);

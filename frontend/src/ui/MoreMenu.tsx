@@ -43,8 +43,8 @@ export function MoreMenu({ items }: { items: NavEntry[] }) {
         aria-label="More"
         onClick={() => setOpen((v) => !v)}
         className={[
-          "flex flex-1 flex-col items-center gap-1 py-2.5 text-[11px] transition-colors",
-          active || open ? "text-acid" : "text-muted",
+          "flex flex-1 flex-col items-center gap-1 border-t-2 border-transparent py-2.5 text-[11px] transition-colors",
+          active || open ? "text-brand" : "text-muted",
         ].join(" ")}
       >
         <span aria-hidden className="text-base leading-none">
@@ -67,7 +67,7 @@ export function MoreMenu({ items }: { items: NavEntry[] }) {
               className={({ isActive }) =>
                 [
                   "flex items-center gap-2 px-4 py-2.5 text-sm transition-colors",
-                  isActive ? "text-acid" : "text-muted hover:text-bone",
+                  isActive ? "text-brand" : "text-muted hover:text-bone",
                 ].join(" ")
               }
             >

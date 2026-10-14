@@ -38,7 +38,7 @@ test("service worker activates and serves the app shell when the network is cut"
 
   await context.setOffline(true);
   await page.reload();
-  await expect(page.getByRole("heading", { name: "Overview" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Dashboard" })).toBeVisible();
   await context.setOffline(false);
 });
 
