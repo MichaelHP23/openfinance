@@ -9,7 +9,7 @@
 //
 // Bump CACHE_VERSION by hand whenever this file's caching behavior changes — it is the only
 // invalidation signal a runtime cache has, since there's no build step generating one.
-const CACHE_VERSION = "v2";
+const CACHE_VERSION = "v3";
 const SHELL_CACHE = `shell-${CACHE_VERSION}`;
 const API_CACHE = `api-${CACHE_VERSION}`;
 
@@ -50,8 +50,12 @@ self.addEventListener("fetch", (event) => {
     // The page itself: network-first. index.html names the content-hashed bundle, so a
     // cached copy pins the whole app to the build it came from — a deploy would never
     // show up. The cache is only for when the network is gone.
+    // "no-store": browsers that met the server before it sent Cache-Control still hold a
+    // heuristically-fresh index.html in their HTTP cache, and a plain fetch() is answered
+    // from it. Fetched by URL because a navigation Request cannot be re-issued with
+    // different options.
     event.respondWith(
-      fetch(request)
+      fetch(request.url, { cache: "no-store", credentials: "same-origin" })
         .then((response) => {
           if (response.ok) {
             const copy = response.clone();
