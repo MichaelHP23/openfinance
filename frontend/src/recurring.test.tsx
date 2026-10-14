@@ -148,7 +148,9 @@ test("expanding a series shows its charges and the honest cancellation copy", as
   fireEvent.click(await screen.findByRole("button", { expanded: false, name: /Netflix/ }));
 
   await waitFor(() =>
-    expect(within(screen.getByRole("table")).getByText("Jul 14")).toBeInTheDocument(),
+    expect(
+      within(screen.getByRole("heading", { name: /July 2026/ }).closest("section")!).getByText("Jul 14"),
+    ).toBeInTheDocument(),
   );
   expect(screen.getByText(/can't cancel anything for you/)).toBeInTheDocument();
   expect(screen.getByLabelText("Rename Netflix")).toBeInTheDocument();

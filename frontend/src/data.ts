@@ -15,6 +15,8 @@ export type Txn = {
   id: string;
   posted_at: string;
   merchant_raw: string;
+  merchant_normalized?: string | null;
+  notes?: string | null;
   amount: string;
   currency: string;
   category_id: string | null;

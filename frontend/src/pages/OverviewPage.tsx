@@ -324,7 +324,7 @@ export function OverviewPage() {
                   <Row
                     key={t.id}
                     glyph={t.merchant_raw.trim().charAt(0).toUpperCase() || "·"}
-                    title={t.merchant_raw}
+                    title={t.merchant_normalized || t.merchant_raw}
                     sub={`${shortDate(t.posted_at)}${t.ignored ? " · Ignored" : ""}`}
                     value={Number(t.amount) > 0 ? `+${usd(t.amount)}` : usd(t.amount)}
                     tone={t.ignored ? "opacity-50" : Number(t.amount) > 0 ? "text-acid" : ""}

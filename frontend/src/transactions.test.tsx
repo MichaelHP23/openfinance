@@ -32,6 +32,11 @@ const txn: Txn = {
 
 beforeEach(() => vi.mocked(apiFetch).mockReset());
 
+/** Rows are collapsed until tapped; the editing controls live in the panel that opens. */
+const openRow = (merchant = "Whole Foods") =>
+  fireEvent.click(screen.getByRole("button", { name: new RegExp(`^${merchant}`) }));
+
+
 // Old fixture-style mock, still used by the two list-rendering tests below. Equality,
 // not .startsWith: apiFetch here is a shared vi.fn() reset between tests, and matching
 // on exact path (with a fallback) is what the rest of this file's mocks do too.
@@ -87,6 +92,7 @@ test("keeps the chosen category visible while its PATCH is in flight", async () 
     return [];
   });
   render(<TxnRows txns={[txn]} />, { wrapper });
+  openRow();
   const selects = (await screen.findAllByLabelText(
     "Category for Whole Foods",
   )) as HTMLSelectElement[];
@@ -103,6 +109,7 @@ test("keeps the chosen category visible after the PATCH succeeds but before the 
     return [];
   });
   render(<TxnRows txns={[txn]} />, { wrapper });
+  openRow();
   const selects = (await screen.findAllByLabelText(
     "Category for Whole Foods",
   )) as HTMLSelectElement[];
@@ -124,6 +131,7 @@ test("shows the PATCH error message when setting a category fails", async () => 
     return [];
   });
   render(<TxnRows txns={[txn]} />, { wrapper });
+  openRow();
   const selects = await screen.findAllByLabelText("Category for Whole Foods");
   await screen.findAllByRole("option", { name: "B" });
   for (const select of selects) fireEvent.change(select, { target: { value: "c2" } });
@@ -138,6 +146,7 @@ test("keeps the rule prompt open and shows the error when 'Make it a rule' fails
     return [];
   });
   render(<TxnRows txns={[txn]} />, { wrapper });
+  openRow();
   const selects = await screen.findAllByLabelText("Category for Whole Foods");
   await screen.findAllByRole("option", { name: "B" });
   for (const select of selects) fireEvent.change(select, { target: { value: "c2" } });
@@ -155,6 +164,7 @@ const patchBody = () => {
 test("Ignore sends ignored: true", async () => {
   vi.mocked(apiFetch).mockResolvedValue([] as never);
   render(<TxnRows txns={[txn]} />, { wrapper });
+  openRow();
   fireEvent.click(screen.getAllByRole("button", { name: "Ignore Whole Foods" })[0]);
   await waitFor(() => expect(patchBody()).toEqual({ ignored: true }));
 });
@@ -162,6 +172,7 @@ test("Ignore sends ignored: true", async () => {
 test("an ignored row says so and offers to count it again", async () => {
   vi.mocked(apiFetch).mockResolvedValue([] as never);
   render(<TxnRows txns={[{ ...txn, ignored: true }]} />, { wrapper });
+  openRow();
   expect(screen.getByText("Ignored")).toBeInTheDocument();
   fireEvent.click(screen.getAllByRole("button", { name: "Count Whole Foods" })[0]);
   await waitFor(() => expect(patchBody()).toEqual({ ignored: false }));
@@ -170,6 +181,7 @@ test("an ignored row says so and offers to count it again", async () => {
 test("editing tags sends them as a list when the field loses focus", async () => {
   vi.mocked(apiFetch).mockResolvedValue([] as never);
   render(<TxnRows txns={[{ ...txn, tags: ["tax"] }]} />, { wrapper });
+  openRow();
   const input = screen.getAllByLabelText("Tags for Whole Foods")[0] as HTMLInputElement;
   expect(input.value).toBe("tax");
   fireEvent.change(input, { target: { value: "tax, Reimbursable ,," } });
@@ -180,6 +192,7 @@ test("editing tags sends them as a list when the field loses focus", async () =>
 test("leaving the tags field unchanged sends nothing", async () => {
   vi.mocked(apiFetch).mockResolvedValue([] as never);
   render(<TxnRows txns={[{ ...txn, tags: ["tax"] }]} />, { wrapper });
+  openRow();
   fireEvent.blur(screen.getAllByLabelText("Tags for Whole Foods")[0]);
   await screen.findAllByLabelText("Category for Whole Foods");
   expect(vi.mocked(apiFetch).mock.calls.some(([path]) => path === "/transactions/1")).toBe(false);
@@ -191,6 +204,7 @@ test("a rejected tag shows the API's reason", async () => {
     return [];
   });
   render(<TxnRows txns={[txn]} />, { wrapper });
+  openRow();
   const input = screen.getAllByLabelText("Tags for Whole Foods")[0];
   fireEvent.change(input, { target: { value: "a" } });
   fireEvent.blur(input);
@@ -209,4 +223,91 @@ test("picking a tag filters the list by it", async () => {
   await screen.findByRole("option", { name: "tax" });
   fireEvent.change(screen.getByLabelText("Filter by tag"), { target: { value: "tax" } });
   expect((await screen.findAllByText("Accountant")).length).toBeGreaterThan(0);
+});
+
+// --- list shape: month groups, bulk select, the detail panel --------------------------
+
+const row = (over: Partial<Txn>): Txn => ({ ...txn, ...over });
+
+test("groups rows under a month heading that carries the month's spend", () => {
+  vi.mocked(apiFetch).mockResolvedValue([] as never);
+  render(
+    <TxnRows
+      txns={[
+        row({ id: "a", posted_at: "2026-02-03T00:00:00Z", amount: "-20.00", merchant_raw: "Cafe" }),
+        row({ id: "b", posted_at: "2026-02-02T00:00:00Z", amount: "-900.00", merchant_raw: "Sofa", ignored: true }),
+        row({ id: "c", posted_at: "2026-02-01T00:00:00Z", amount: "3000.00", merchant_raw: "Payroll" }),
+        row({ id: "d", posted_at: "2026-01-09T00:00:00Z", amount: "-5.50", merchant_raw: "Kiosk" }),
+      ]}
+    />,
+    { wrapper },
+  );
+  const feb = screen.getByRole("heading", { name: /February 2026/ });
+  // Ignored rows and income are in the list but not in the month's spend.
+  expect(feb).toHaveTextContent("$20.00 total spend");
+  expect(screen.getByRole("heading", { name: /January 2026/ })).toHaveTextContent("$5.50 total spend");
+});
+
+test("shows the display name once one is set, keeping the bank's text for the controls", () => {
+  vi.mocked(apiFetch).mockResolvedValue([] as never);
+  render(<TxnRows txns={[row({ merchant_normalized: "Groceries Co" })]} />, { wrapper });
+  fireEvent.click(screen.getByRole("button", { name: /^Groceries Co/ }));
+  expect(screen.getByLabelText("Tags for Whole Foods")).toBeInTheDocument();
+});
+
+test("ticked rows can be ignored together", async () => {
+  vi.mocked(apiFetch).mockResolvedValue([] as never);
+  render(
+    <TxnRows
+      txns={[row({ id: "1", merchant_raw: "Cafe" }), row({ id: "2", merchant_raw: "Kiosk" }), row({ id: "3", merchant_raw: "Store" })]}
+    />,
+    { wrapper },
+  );
+  expect(screen.queryByRole("button", { name: "Ignore selected" })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByLabelText("Select Cafe"));
+  fireEvent.click(screen.getByLabelText("Select Store"));
+  expect(screen.getByText("2 selected")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Ignore selected" }));
+  await waitFor(() => {
+    const patched = vi
+      .mocked(apiFetch)
+      .mock.calls.filter(([, init]) => (init as RequestInit | undefined)?.method === "PATCH")
+      .map(([path, init]) => [path, JSON.parse((init as RequestInit).body as string)]);
+    expect(patched).toEqual([
+      ["/transactions/1", { ignored: true }],
+      ["/transactions/3", { ignored: true }],
+    ]);
+  });
+  // The selection clears once the change is saved.
+  await waitFor(() => expect(screen.queryByText("2 selected")).not.toBeInTheDocument());
+});
+
+test("renaming saves a display name, and clearing it goes back to the bank's text", async () => {
+  vi.mocked(apiFetch).mockResolvedValue([] as never);
+  render(<TxnRows txns={[txn]} />, { wrapper });
+  openRow();
+  const name = screen.getByLabelText("Name for Whole Foods");
+  fireEvent.change(name, { target: { value: "  Groceries  " } });
+  fireEvent.blur(name);
+  await waitFor(() => expect(patchBody()).toEqual({ merchant_normalized: "Groceries" }));
+});
+
+test("a note is saved when its field loses focus", async () => {
+  vi.mocked(apiFetch).mockResolvedValue([] as never);
+  render(<TxnRows txns={[txn]} />, { wrapper });
+  openRow();
+  const note = screen.getByLabelText("Note for Whole Foods");
+  fireEvent.change(note, { target: { value: "dinner with parents" } });
+  fireEvent.blur(note);
+  await waitFor(() => expect(patchBody()).toEqual({ notes: "dinner with parents" }));
+});
+
+test("Tax deductible is the tax tag, added without dropping the others", async () => {
+  vi.mocked(apiFetch).mockResolvedValue([] as never);
+  render(<TxnRows txns={[row({ tags: ["work"] })]} />, { wrapper });
+  openRow();
+  const box = screen.getByLabelText("Tax deductible") as HTMLInputElement;
+  expect(box.checked).toBe(false);
+  fireEvent.click(box);
+  await waitFor(() => expect(patchBody()).toEqual({ tags: ["work", "tax"] }));
 });
