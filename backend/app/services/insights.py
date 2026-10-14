@@ -2,7 +2,7 @@
 
 The digest (app.services.digest) is built first and handed to the model as opening
 context, exactly like the single-call `generate` this replaces did — the difference
-is that the model can now ask follow-up questions of eight read-only tools
+is that the model can now ask follow-up questions of eleven read-only tools
 (app.services.advisor_tools) instead of being limited to whatever the digest happened
 to precompute. It never calculates and never writes: every number in its answer must
 trace to the digest or a tool result, and the tools themselves are asserted against
@@ -33,7 +33,8 @@ Absolute rules:
 - You have read-only tools for looking up more than the digest precomputed: net worth
   history, spending by category, individual transactions (at most 50 rows per
   search), budget status, a cash-flow forecast, goal progress, investment holdings,
-  and recurring charges. Call a tool when the question needs a number the digest
+  recurring charges, current alerts, safe-to-spend, and whether a purchase is
+  affordable. Call a tool when the question needs a number the digest
   doesn't already give you. Do not call a tool to re-derive a number the digest
   already gives you.
 - Do not recommend specific financial products, investments, or tax strategies.

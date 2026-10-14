@@ -22,6 +22,7 @@ from pydantic import BaseModel, Field, ValidationError
 from sqlalchemy.orm import Session
 
 from app.models.recurring import SeriesStatus
+from app.services import alerts as alerts_service
 from app.services import budgets as budgets_service
 from app.services import categories as categories_service
 from app.services import forecast as forecast_service
@@ -263,6 +264,62 @@ def _goal_progress(db: Session, household_id: uuid.UUID, args: GoalProgressArgs)
     }
 
 
+class NoArgs(BaseModel):
+    pass
+
+
+def _alerts(db: Session, household_id: uuid.UUID, args: NoArgs) -> dict[str, Any]:
+    """The same list the Overview card shows — dismissed ones already left out. The
+    dismissal key stays behind: the model has no use for it and cannot dismiss."""
+    return {
+        "alerts": [
+            {
+                "kind": a.kind.value,
+                "severity": a.severity,
+                "title": a.title,
+                "body": a.body,
+                "occurred_on": a.occurred_on.isoformat(),
+            }
+            for a in alerts_service.list_for(db, household_id)
+        ]
+    }
+
+
+def _safe_to_spend(db: Session, household_id: uuid.UUID, args: NoArgs) -> dict[str, Any]:
+    s = forecast_service.safe_to_spend(db, household_id)
+    return {
+        "amount": _money(s.amount),
+        "until": s.until.isoformat() if s.until else None,
+        "bills_due": s.bills_due,
+    }
+
+
+class CanIAffordArgs(BaseModel):
+    amount: Decimal = Field(gt=0)  # the purchase's cost, as a positive number
+    on_date: date
+    months: int = Field(default=6, ge=1, le=24)
+
+
+def _can_i_afford(db: Session, household_id: uuid.UUID, args: CanIAffordArgs) -> dict[str, Any]:
+    # OutOfRangeDate propagates: run_tool turns it into an error the model can read,
+    # and its message names the valid range.
+    r = forecast_service.can_i_afford(db, household_id, args.amount, args.on_date, args.months)
+    return {
+        "stays_non_negative": r.stays_non_negative,
+        "minimum_balance": _money(r.minimum_balance),
+        "goal_impact": [
+            {
+                "goal": g.goal_name,
+                "projected_date": g.baseline_date.isoformat() if g.baseline_date else None,
+                "projected_date_with_purchase": (
+                    g.with_amount_date.isoformat() if g.with_amount_date else None
+                ),
+            }
+            for g in r.goal_impact
+        ],
+    }
+
+
 _DESCRIPTIONS: dict[str, str] = {
     "net_worth_history": "Net worth (assets, debts, net) per recorded day over the trailing N months.",
     "holdings_summary": "Current investment holdings: units, market value, unrealized gain, share of portfolio.",
@@ -276,6 +333,21 @@ _DESCRIPTIONS: dict[str, str] = {
     "budget_status": "Budgeted vs. actual spend, remaining amount, and pace for every category in a given month.",
     "cashflow_forecast": "Projected cash balance over N months, optionally with one hypothetical purchase or deposit.",
     "goal_progress": "Progress and projected completion date for every active savings or debt-payoff goal.",
+    "alerts": (
+        "What currently needs the household's attention: bills due, price increases, "
+        "renewals, charges after a cancellation, projected negative cash, over-budget "
+        "categories, unusually large charges. Dismissed alerts are left out."
+    ),
+    "safe_to_spend": (
+        "How much can leave the cash accounts before the next payday without going "
+        "negative, after recurring bills and budgeted spending. `until` is the payday, "
+        "or null when no income is detected (then the window is 30 days)."
+    ),
+    "can_i_afford": (
+        "Whether a purchase of `amount` on `on_date` keeps projected cash at or above "
+        "zero over the next N months, the lowest balance it leads to, and how it moves "
+        "each goal's projected date. Use this for any 'can I afford' question."
+    ),
 }
 
 # name -> (Pydantic argument schema, wrapper function). Order here is the order
@@ -289,6 +361,9 @@ _REGISTRY: dict[str, tuple[type[BaseModel], Any]] = {
     "budget_status": (BudgetStatusArgs, _budget_status),
     "cashflow_forecast": (CashflowForecastArgs, _cashflow_forecast),
     "goal_progress": (GoalProgressArgs, _goal_progress),
+    "alerts": (NoArgs, _alerts),
+    "safe_to_spend": (NoArgs, _safe_to_spend),
+    "can_i_afford": (CanIAffordArgs, _can_i_afford),
 }
 
 ALLOWED_TOOLS: tuple[str, ...] = tuple(_REGISTRY.keys())

@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AlertBell, AlertsCard } from "./AlertsCard";
+import { questionFor } from "./alerts";
 import type { Alert } from "./alerts";
 
 vi.mock("./api/client", () => ({ apiFetch: vi.fn(), API_BASE: "" }));
@@ -80,6 +81,53 @@ describe("AlertsCard", () => {
         method: "POST",
         body: JSON.stringify({ key: "bill_due:s1:2026-10-13" }),
       }),
+    );
+  });
+});
+
+describe("Ask advisor", () => {
+  const withAdvisor = (available: boolean, alerts: Alert[]) =>
+    vi.mocked(apiFetch).mockImplementation(async (path: string) =>
+      path === "/insights/available" ? { available } : alerts,
+    );
+
+  it("hands the assistant a question built from the alert", async () => {
+    withAdvisor(true, [
+      alert({
+        kind: "price_increase",
+        title: "Netflix went up",
+        body: "The last charge was $3.00 higher than usual.",
+      }),
+    ]);
+    const onAsk = vi.fn();
+    show(<AlertsCard onAsk={onAsk} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Ask advisor about Netflix went up" }));
+    expect(onAsk).toHaveBeenCalledWith(
+      "Netflix went up. The last charge was $3.00 higher than usual. What are my options?",
+    );
+  });
+
+  it("is not offered when no model is configured", async () => {
+    withAdvisor(false, [alert()]);
+    show(<AlertsCard onAsk={vi.fn()} />);
+    await screen.findByText("Netflix is due soon");
+    expect(screen.queryByRole("button", { name: /Ask advisor/ })).not.toBeInTheDocument();
+  });
+
+  it("asks a different question for each kind, and a plain one for a kind it does not know", () => {
+    const kinds = [
+      "bill_due",
+      "price_increase",
+      "yearly_renewal",
+      "still_billing",
+      "low_balance",
+      "over_budget",
+      "large_charge",
+    ];
+    const questions = kinds.map((kind) => questionFor(alert({ kind })));
+    expect(new Set(questions).size).toBe(kinds.length);
+    expect(questionFor(alert({ kind: "from_the_future", title: "T", body: "B." }))).toBe(
+      "T. B. What should I do about this?",
     );
   });
 });

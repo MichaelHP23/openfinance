@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { useAlerts, useDismissAlert } from "./alerts";
+import { questionFor, useAdvisorAvailable, useAlerts, useDismissAlert } from "./alerts";
 import type { Alert, AlertSeverity } from "./alerts";
 import { Card } from "./ui/Shell";
 
@@ -14,7 +14,7 @@ const DOT: Record<AlertSeverity, string> = {
   info: "bg-muted",
 };
 
-function AlertRow({ alert }: { alert: Alert }) {
+function AlertRow({ alert, onAsk }: { alert: Alert; onAsk?: (question: string) => void }) {
   const dismiss = useDismissAlert();
   return (
     <li className="flex items-start gap-3 border-b border-line py-3 last:border-0">
@@ -29,6 +29,16 @@ function AlertRow({ alert }: { alert: Alert }) {
           <p className="text-xs text-clay">{(dismiss.error as Error).message}</p>
         )}
       </div>
+      {onAsk && (
+        <button
+          type="button"
+          aria-label={`Ask advisor about ${alert.title}`}
+          onClick={() => onAsk(questionFor(alert))}
+          className="label px-2 py-1 transition-colors hover:text-bone"
+        >
+          Ask advisor
+        </button>
+      )}
       <button
         type="button"
         aria-label={`Dismiss ${alert.title}`}
@@ -42,8 +52,11 @@ function AlertRow({ alert }: { alert: Alert }) {
   );
 }
 
-export function AlertsCard() {
+/** `onAsk` receives a ready-made question about one alert. The button only appears when
+ * a model is configured — without one there is nothing to hand the question to. */
+export function AlertsCard({ onAsk }: { onAsk?: (question: string) => void }) {
   const { data: alerts = [], isError } = useAlerts();
+  const canAsk = useAdvisorAvailable(onAsk !== undefined);
   const [showAll, setShowAll] = useState(false);
   // A failed fetch must not look the same as "nothing needs attention".
   if (isError) return <p className="mb-8 text-sm text-clay">Couldn't load alerts.</p>;
@@ -56,7 +69,7 @@ export function AlertsCard() {
       </h2>
       <ul>
         {(showAll ? alerts : alerts.slice(0, SHOWN)).map((a) => (
-          <AlertRow key={a.key} alert={a} />
+          <AlertRow key={a.key} alert={a} onAsk={canAsk ? onAsk : undefined} />
         ))}
       </ul>
       {extra > 0 && (

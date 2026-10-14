@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useAccounts, useNetWorthHistory, useTransactions } from "../data";
 import { TxnRows } from "../transactions";
@@ -24,6 +25,8 @@ export function OverviewPage() {
   const { data: accounts = [] } = useAccounts();
   const { data: txns = [] } = useTransactions();
   const { data: history = [] } = useNetWorthHistory(90);
+  // A question an alert's "Ask advisor" hands to the assistant card further down.
+  const [prompt, setPrompt] = useState<{ question: string }>();
 
   const { assets, debts, net } = netWorth(accounts);
   const month = monthTotals(txns, THIS_MONTH);
@@ -39,7 +42,7 @@ export function OverviewPage() {
         sub={NOW.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
       />
 
-      <AlertsCard />
+      <AlertsCard onAsk={(question) => setPrompt({ question })} />
       {/* An empty install has no cash to reason about; "$0 — nothing spare" would be noise. */}
       {accounts.length > 0 && <SafeToSpendCard />}
 
@@ -166,7 +169,7 @@ export function OverviewPage() {
         )}
       </Card>
 
-      <Assistant />
+      <Assistant prompt={prompt} />
     </>
   );
 }
